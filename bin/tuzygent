@@ -1,0 +1,288 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use App\Application\Service\TuzygentHarnessService;
+use App\Infrastructure\Container\Container;
+
+$composerAutoload = dirname(__DIR__) . '/vendor/autoload.php';
+if (is_file($composerAutoload)) {
+    require_once $composerAutoload;
+} else {
+    spl_autoload_register(static function (string $class): void {
+        $prefix = 'App\\';
+        $baseDir = dirname(__DIR__) . '/src/';
+        if (strncmp($prefix, $class, strlen($prefix)) !== 0) {
+            return;
+        }
+        $relativeClass = substr($class, strlen($prefix));
+        $file = $baseDir . str_replace('\\', '/', $relativeClass) . '.php';
+        if (is_file($file)) {
+            require_once $file;
+        }
+    });
+}
+
+$config = require dirname(__DIR__) . '/config/app.php';
+$container = new Container($config);
+$harness = $container->get(TuzygentHarnessService::class);
+
+$command = $argv[1] ?? 'status';
+
+echo "================================================================\n";
+echo " ⬡ TUZYGENT AUTONOMOUS SELF-EVOLVING CODE HARNESS (PHP 8.5)\n";
+echo "================================================================\n\n";
+
+switch ($command) {
+    case 'status':
+        $cState = $harness->getContinuousState();
+        $cIcon = $cState['enabled'] ? '🟢 RUNNING' : '⚪ STOPPED';
+        echo "🔄 Continuous Autonomous Mode: {$cIcon}\n";
+        echo sprintf(
+            "  Chu kỳ đã chạy: %d | Tasks đã thực thi: %d (Pass: %d, Rollback: %d) | Interval: %ds | Auto-Discover: %s\n",
+            $cState['cycles_completed'],
+            $cState['tasks_executed'],
+            $cState['tasks_succeeded'],
+            $cState['tasks_rolled_back'],
+            $cState['interval_seconds'],
+            $cState['auto_discover'] ? 'ON' : 'OFF'
+        );
+        if ($cState['pid'] !== null) {
+            echo sprintf("  Daemon PID: %d (Alive: %s)\n", $cState['pid'], $cState['daemon_alive'] ? 'YES' : 'NO');
+        }
+        echo "  Tóm tắt gần nhất: " . $cState['last_cycle_summary'] . "\n\n";
+
+        echo "🤖 AI Agent Runners:\n";
+        foreach ($harness->discoverAgents() as $key => $ag) {
+            $icon = $ag['available'] ? '🟢' : '⚪';
+            echo sprintf("  %s %-20s — %s\n", $icon, $key, $ag['name']);
+        }
+        echo "\n📜 Task Backlog:\n";
+        foreach ($harness->listTasks() as $t) {
+            echo sprintf("  [#%d | %s] %-12s %s (Agent: %s)\n", $t->id, $t->taskCode, '[' . strtoupper($t->status->value) . ']', $t->title, $t->agentBackend);
+        }
+        echo "\n📸 Snapshots gần nhất:\n";
+        foreach (array_slice($harness->listSnapshots(), 0, 5) as $s) {
+            echo sprintf("  - %s (%s, %d files)\n", $s['snapshot_id'], $s['created_at'], $s['file_count']);
+        }
+        break;
+
+    case 'verify':
+        $report = $harness->runVerificationGate();
+        echo $report['summary'] . "\n\n";
+        if ($report['passed']) {
+            echo "🎉 VERIFICATION GATE: ALL 3 STAGES PASSED!\n";
+            exit(0);
+        }
+        echo "❌ VERIFICATION GATE FAILED!\n";
+        exit(1);
+
+    case 'scaffold':
+        $entityName = $argv[2] ?? '';
+        if ($entityName === '') {
+            fwrite(STDERR, "Usage: ./bin/tuzygent scaffold <PascalCaseEntityName> [description]\n");
+            exit(1);
+        }
+        $desc = $argv[3] ?? "Tự động phát triển thực thể {$entityName}";
+        $taskId = $harness->createTask([
+            'title' => "Tự động phát triển phân hệ Hexagonal: {$entityName}",
+            'action_type' => 'scaffold_module',
+            'target_name' => $entityName,
+            'specification' => $desc,
+            'agent_backend' => 'builtin-hexagonal',
+            'max_attempts' => 3,
+        ]);
+        $result = $harness->executeTask($taskId);
+        echo $result->executionLog . "\n\n";
+        echo $result->verificationOutput . "\n";
+        exit($result->status->value === 'completed' ? 0 : 1);
+
+    case 'research':
+        $args = array_slice($argv, 2);
+        $backend = 'codex';
+        $topicParts = [];
+        foreach ($args as $arg) {
+            if (str_starts_with($arg, '--backend=')) {
+                $backend = substr($arg, 10);
+            } else {
+                $topicParts[] = $arg;
+            }
+        }
+        $topic = trim(implode(' ', $topicParts));
+        if ($topic === '') {
+            fwrite(STDERR, "Usage: ./bin/tuzygent research [--backend=codex|claude|gemini|opencode|cursor-agent] <đề tài và yêu cầu tính năng>\n");
+            exit(1);
+        }
+        $taskId = $harness->createTask([
+            'title' => 'Nghiên cứu và triển khai: ' . mb_strimwidth($topic, 0, 100, '...'),
+            'action_type' => 'research_and_develop',
+            'specification' => $topic,
+            'agent_backend' => $backend,
+            'max_attempts' => 3,
+        ]);
+        $result = $harness->executeTask($taskId);
+        echo $result->executionLog . "\n\n" . $result->verificationOutput . "\n";
+        echo "Research report: .harness/research/{$result->taskCode}.md\n";
+        exit($result->status->value === 'completed' ? 0 : 1);
+
+    case 'run':
+        $targetId = isset($argv[2]) && is_numeric($argv[2]) ? (int) $argv[2] : null;
+        if (in_array('--continuous', $argv, true) || in_array('-c', $argv, true)) {
+            goto run_continuous_mode;
+        }
+        $tasks = $harness->listTasks();
+        foreach ($tasks as $t) {
+            if ($targetId !== null && $t->id !== $targetId) {
+                continue;
+            }
+            if ($targetId === null && $t->status->value !== 'backlog') {
+                continue;
+            }
+            echo ">>> Đang thực thi Task #{$t->id} ({$t->taskCode}): {$t->title}\n";
+            $res = $harness->executeTask((int) $t->id);
+            echo $res->executionLog . "\n";
+            echo ">>> Kết quả: " . $res->status->label() . "\n\n";
+        }
+        break;
+
+    case 'continuous':
+    case 'continuous:run':
+        run_continuous_mode:
+        $maxCycles = 0;
+        $interval = 3;
+        $autoDiscover = true;
+        $daemon = false;
+
+        foreach (array_slice($argv, 2) as $arg) {
+            if (str_starts_with($arg, '--cycles=')) {
+                $maxCycles = max(0, (int) substr($arg, 9));
+            } elseif (str_starts_with($arg, '--interval=')) {
+                $interval = max(1, (int) substr($arg, 11));
+            } elseif ($arg === '--auto-discover') {
+                $autoDiscover = true;
+            } elseif ($arg === '--no-auto-discover') {
+                $autoDiscover = false;
+            } elseif ($arg === '--daemon' || $arg === '-d') {
+                $daemon = true;
+            }
+        }
+
+        if ($daemon) {
+            $st = $harness->startContinuousMode([
+                'interval_seconds' => $interval,
+                'auto_discover' => $autoDiscover,
+                'max_cycles' => $maxCycles,
+                'spawn_daemon' => true,
+            ]);
+            echo sprintf(
+                "🚀 Đã khởi chạy Tuzygent Continuous Daemon ở chế độ nền (PID: %s, Interval: %ds, Auto-Discover: %s)\n",
+                $st['pid'] ?? 'N/A',
+                $st['interval_seconds'],
+                $st['auto_discover'] ? 'ON' : 'OFF'
+            );
+            break;
+        }
+
+        echo sprintf(
+            "🔄 Đang chạy Tuzygent Continuous Autonomous Mode (Interval: %ds | Max Cycles: %s | Auto-Discover: %s)...\n",
+            $interval,
+            $maxCycles > 0 ? (string) $maxCycles : '∞ (Liên tục)',
+            $autoDiscover ? 'ON' : 'OFF'
+        );
+        echo "   (Nhấn Ctrl+C hoặc chạy './bin/tuzygent continuous:stop' để dừng an toàn)\n\n";
+
+        $harness->runContinuousLoop(
+            $maxCycles,
+            $interval,
+            $autoDiscover,
+            static function (array $cycleReport): void {
+                $icon = $cycleReport['gate_passed'] ? '✅' : '⚠️';
+                echo sprintf("[%s] %s %s\n", date('H:i:s'), $icon, $cycleReport['summary']);
+                if ($cycleReport['task'] !== null) {
+                    echo $cycleReport['task']->executionLog . "\n\n";
+                }
+            }
+        );
+        echo "\n⏹️ Đã kết thúc vòng lặp Continuous Mode.\n";
+        break;
+
+    case 'continuous:start':
+        $interval = 5;
+        $autoDiscover = true;
+        foreach (array_slice($argv, 2) as $arg) {
+            if (str_starts_with($arg, '--interval=')) {
+                $interval = max(1, (int) substr($arg, 11));
+            } elseif ($arg === '--auto-discover') {
+                $autoDiscover = true;
+            } elseif ($arg === '--no-auto-discover') {
+                $autoDiscover = false;
+            }
+        }
+        $st = $harness->startContinuousMode([
+            'interval_seconds' => $interval,
+            'auto_discover' => $autoDiscover,
+            'spawn_daemon' => true,
+        ]);
+        echo sprintf(
+            "🟢 Đã bật Continuous Mode (Daemon PID: %s | Interval: %ds | Auto-Discover: %s)\n",
+            $st['pid'] ?? 'Web/CLI',
+            $st['interval_seconds'],
+            $st['auto_discover'] ? 'ON' : 'OFF'
+        );
+        break;
+
+    case 'continuous:stop':
+        $harness->stopContinuousMode();
+        echo "⏹️ Đã dừng chế độ Continuous Autonomous Mode thành công.\n";
+        break;
+
+    case 'continuous:tick':
+        $autoDiscover = in_array('--auto-discover', $argv, true) ? true : null;
+        $cycle = $harness->runContinuousCycle($autoDiscover);
+        echo sprintf("⚡ [Cycle #%d] %s\n", $cycle['cycle'], $cycle['summary']);
+        if ($cycle['task'] !== null) {
+            echo "\n" . $cycle['task']->executionLog . "\n";
+        }
+        exit($cycle['gate_passed'] ? 0 : 1);
+
+    case 'continuous:status':
+        $cState = $harness->getContinuousState();
+        echo json_encode($cState, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
+        break;
+
+    case 'snapshot':
+        $label = $argv[2] ?? 'cli';
+        $snapId = $harness->createSnapshot($label);
+        echo "📸 Đã tạo Snapshot thành công: {$snapId}\n";
+        break;
+
+    case 'rollback':
+        $snapId = $argv[2] ?? '';
+        if ($snapId === '') {
+            fwrite(STDERR, "Usage: ./bin/tuzygent rollback <snapshot_id>\n");
+            exit(1);
+        }
+        if ($harness->rollbackToSnapshot($snapId)) {
+            echo "⏪ Đã Rollback mã nguồn về Snapshot [{$snapId}] thành công!\n";
+            exit(0);
+        }
+        fwrite(STDERR, "❌ Không tìm thấy Snapshot [{$snapId}].\n");
+        exit(1);
+
+    default:
+        echo "Các lệnh hỗ trợ:\n";
+        echo "  ./bin/tuzygent status                                              Xem trạng thái Agent, Continuous Mode, Backlog & Snapshots\n";
+        echo "  ./bin/tuzygent verify                                              Chạy 3-Stage Verification Gate\n";
+        echo "  ./bin/tuzygent scaffold <EntityName>                               Tự động sinh & kiểm thử phân hệ Hexagonal mới\n";
+        echo "  ./bin/tuzygent research [--backend=codex] <đề tài>                 Tự nghiên cứu, ghi nguồn và triển khai tính năng\n";
+        echo "  ./bin/tuzygent run [task_id]                                       Chạy vòng lặp Autonomous Loop trên Backlog\n";
+        echo "  ./bin/tuzygent continuous [--cycles=N] [--interval=S] [--no-auto-discover] [--daemon]  Chạy continuous, tự brainstorm khi backlog trống\n";
+        echo "  ./bin/tuzygent continuous:start [--interval=S] [--no-auto-discover]   Khởi chạy Continuous Daemon chạy ngầm\n";
+        echo "  ./bin/tuzygent continuous:stop                                     Dừng chế độ Continuous Autonomous Mode\n";
+        echo "  ./bin/tuzygent continuous:tick [--auto-discover]                   Thực thi 1 chu kỳ (Single Tick) của Continuous Mode\n";
+        echo "  ./bin/tuzygent continuous:status                                   Xem chi tiết trạng thái Continuous Mode (JSON)\n";
+        echo "  ./bin/tuzygent snapshot [label]                                    Tạo bản sao lưu mã nguồn\n";
+        echo "  ./bin/tuzygent rollback <snapshot_id>                              Khôi phục mã nguồn về Snapshot\n";
+        break;
+}

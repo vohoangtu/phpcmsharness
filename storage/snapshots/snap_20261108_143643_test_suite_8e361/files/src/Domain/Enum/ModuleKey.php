@@ -1,0 +1,63 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Enum;
+
+enum ModuleKey: string
+{
+    case POSTS = 'posts';
+    case PRODUCTS = 'products';
+    case ORDERS = 'orders';
+    case COMMENTS = 'comments';
+    case MEDIA = 'media';
+    case CATEGORIES_TAGS = 'categories_tags';
+    case HARNESS = 'harness';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::POSTS => 'Bài viết & Tin tức (Blog)',
+            self::PRODUCTS => 'Sản phẩm & Cửa hàng (Woo-Style)',
+            self::ORDERS => 'Giỏ hàng & Đơn hàng (E-Commerce)',
+            self::COMMENTS => 'Bình luận & Đánh giá 5 sao',
+            self::MEDIA => 'Thư viện Media (Quản lý ảnh)',
+            self::CATEGORIES_TAGS => 'Danh mục & Thẻ (Taxonomies)',
+            self::HARNESS => 'Tuzygent AI Harness (Tự phát triển Code)',
+        };
+    }
+
+    public function description(): string
+    {
+        return match ($this) {
+            self::POSTS => 'Cho phép soạn thảo, xuất bản bài viết tin tức/blog với trình soạn thảo Rich Text và hiển thị ngoài trang chủ.',
+            self::PRODUCTS => 'Quản lý danh mục sản phẩm, giá bán, giá khuyến mãi, mã SKU, tồn kho và trang cửa hàng.',
+            self::ORDERS => 'Kích hoạt giỏ hàng, trang đặt hàng (Checkout) và quản lý đơn đặt hàng. Khi tắt, cửa hàng hoạt động ở chế độ Catalog trưng bày.',
+            self::COMMENTS => 'Cho phép khách gửi bình luận dưới bài viết và đánh giá 5 sao cho sản phẩm, kèm bộ lọc duyệt/spam trong Admin.',
+            self::MEDIA => 'Quản lý tập trung hình ảnh tải lên, chọn ảnh nhanh khi viết bài hoặc đăng sản phẩm.',
+            self::CATEGORIES_TAGS => 'Phân loại bài viết & sản phẩm theo Danh mục đa cấp và gắn thẻ Tags chuẩn SEO.',
+            self::HARNESS => 'Hệ thống Autonomous Self-Evolving Code Harness kiểu Tuzygent: Quản lý Backlog, tự sinh/sửa code theo chuẩn Hexagonal, chạy Verification Gate, Self-Healing và Snapshot Rollback.',
+        };
+    }
+
+    public function icon(): string
+    {
+        return match ($this) {
+            self::POSTS => '📝',
+            self::PRODUCTS => '🛍️',
+            self::ORDERS => '🛒',
+            self::COMMENTS => '💬',
+            self::MEDIA => '🖼️',
+            self::CATEGORIES_TAGS => '🏷️',
+            self::HARNESS => '🤖',
+        };
+    }
+
+    public function dependsOn(): ?self
+    {
+        return match ($this) {
+            self::ORDERS => self::PRODUCTS,
+            default => null,
+        };
+    }
+}

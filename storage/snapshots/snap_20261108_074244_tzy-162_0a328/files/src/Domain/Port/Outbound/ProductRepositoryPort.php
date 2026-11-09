@@ -1,0 +1,39 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Domain\Port\Outbound;
+
+use App\Domain\Entity\Product;
+use App\Domain\Enum\ContentStatus;
+
+interface ProductRepositoryPort
+{
+    /**
+     * @return Product[]
+     */
+    public function findAll(
+        ?ContentStatus $status = null,
+        ?int $categoryId = null,
+        string $search = '',
+        ?bool $featuredOnly = null,
+        ?int $limit = null
+    ): array;
+
+    public function findById(int $id): ?Product;
+
+    public function findBySlug(string $slug): ?Product;
+
+    public function save(Product $product): int;
+
+    public function updateStatus(int $id, ContentStatus $status): void;
+
+    public function decrementStock(int $productId, int $quantity): bool;
+
+    public function delete(int $id): void;
+
+    /**
+     * @return array<string, int>
+     */
+    public function countByStatuses(): array;
+}
