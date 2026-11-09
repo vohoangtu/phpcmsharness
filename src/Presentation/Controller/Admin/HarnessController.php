@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Presentation\Controller\Admin;
 
 use App\Application\Service\TuzygentHarnessService;
+use App\Application\Service\WorkerService;
 use App\Infrastructure\Container\Container;
 use App\Presentation\Controller\BaseController;
 use App\Presentation\Formatting\HarnessTaskProgressFormatter;
@@ -31,45 +32,64 @@ final class HarnessController extends BaseController
             'tasks' => $tasks,
             'taskProgress' => $this->taskProgressFormatter->format($tasks),
             'agents' => $harness->discoverAgents(),
+            'apiConfig' => $harness->getApiConfig(),
             'snapshots' => $harness->listSnapshots(),
             'gateReport' => $gateReport,
             'continuousState' => $harness->getContinuousState(),
         ]);
     }
 
+    public function saveApiConfig(): void
+    {
+        try {
+            $this->container->get(TuzygentHarnessService::class)->saveApiConfig($_POST);
+            $this->flash('success', 'Đã lưu cấu hình OpenAI-compatible API.');
+        } catch (\Throwable $e) {
+            $this->flash('error', $e->getMessage());
+        }
+        $this->redirect('/admin/harness');
+    }
+
     public function createTask(): void
     {
         $harness = $this->container->get(TuzygentHarnessService::class);
         $taskId = $harness->createTask($_POST);
-
-        if (!empty($_POST['run_immediately'])) {
-            $executed = $harness->executeTask($taskId);
-            if ($executed->status->value === 'completed') {
-                $this->flash('success', sprintf('🎉 Task %s đã tự phát triển code và vượt qua cả 3 Verification Gates thành công!', $executed->taskCode));
-            } else {
-                $this->flash('error', sprintf('⚠️ Task %s không vượt qua Verification Gate và đã tự động Rollback về Snapshot %s.', $executed->taskCode, $executed->snapshotId));
-            }
-        } else {
-            $this->flash('success', 'Đã thêm Task mới vào Backlog của Tuzygent Harness.');
-        }
+        try {
+            $this->container->get(WorkerService::class)->enqueue('harness_task', ['task_id' => $taskId]);
+            $this->flash('success', !empty($_POST['run_immediately']) ? 'Đã xếp task vào Workers; xử lý sẽ bắt đầu nền.' : 'Đã thêm task vào hàng đợi Workers.');
+        } catch (\Throwable $e) { $this->flash('error', $e->getMessage()); }
 
         $this->redirect('/admin/harness');
     }
 
     public function runTask(string $id): void
     {
-        $harness = $this->container->get(TuzygentHarnessService::class);
         try {
-            $executed = $harness->executeTask((int) $id);
-            if ($executed->status->value === 'completed') {
-                $this->flash('success', sprintf('🚀 Hoàn tất vòng lặp tự phát triển cho %s (%d lần thử) — Tất cả 3 Gates đều PASS!', $executed->taskCode, $executed->attempts));
-            } else {
-                $this->flash('error', sprintf('⏪ Task %s thất bại sau %d lần thử. Đã tự động Rollback về Snapshot [%s].', $executed->taskCode, $executed->attempts, $executed->snapshotId));
-            }
+            $this->container->get(WorkerService::class)->enqueue('harness_task', ['task_id' => (int)$id]);
+            $this->flash('success', 'Task đã được xếp vào hàng đợi Workers.');
         } catch (\Throwable $e) {
             $this->flash('error', $e->getMessage());
         }
 
+        $this->redirect('/admin/harness');
+    }
+
+    public function installUpdate(string $id): void
+    {
+        try {
+            $task = $this->container->get(TuzygentHarnessService::class)->installUpdate((int) $id);
+            if ($task->status === \App\Domain\Enum\HarnessTaskStatus::COMPLETED) {
+                $this->flash('success', sprintf('Đã cài gói cập nhật %s lên website.', $task->taskCode));
+            } elseif ($task->status === \App\Domain\Enum\HarnessTaskStatus::ROLLED_BACK) {
+                $this->flash('error', sprintf('Cài đặt %s thất bại; mã nguồn và database đã được khôi phục về snapshot.', $task->taskCode));
+            } elseif ($task->snapshotId === '') {
+                $this->flash('error', sprintf('Không thể cài gói %s; website chưa bị thay đổi. Xem log để biết lý do và tạo lại gói nếu source đã cập nhật.', $task->taskCode));
+            } else {
+                $this->flash('error', sprintf('Cài đặt %s thất bại; không xác nhận được khôi phục hoàn chỉnh. Hãy xem log trước khi thử lại.', $task->taskCode));
+            }
+        } catch (\Throwable $e) {
+            $this->flash('error', $e->getMessage());
+        }
         $this->redirect('/admin/harness');
     }
 
@@ -136,7 +156,8 @@ final class HarnessController extends BaseController
         ]);
 
         // Thực thi ngay chu kỳ đầu tiên khi kích hoạt từ Web UI
-        $firstCycle = $harness->runContinuousCycle($autoDiscover);
+        $firstCycle = $harness->runContinuousCycle($autoDiscover, true);
+        $this->enqueueContinuousTask($firstCycle);
 
         $this->flash(
             'success',
@@ -154,7 +175,8 @@ final class HarnessController extends BaseController
     {
         $harness = $this->container->get(TuzygentHarnessService::class);
         $autoDiscover = isset($_POST['auto_discover']) ? !empty($_POST['auto_discover']) : null;
-        $cycle = $harness->runContinuousCycle($autoDiscover);
+        $cycle = $harness->runContinuousCycle($autoDiscover, true);
+        $this->enqueueContinuousTask($cycle);
 
         $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
         if ($isAjax || !empty($_POST['json'])) {
@@ -186,6 +208,19 @@ final class HarnessController extends BaseController
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($state, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         exit;
+    }
+
+    /** @param array<string, mixed> $cycle */
+    private function enqueueContinuousTask(array &$cycle): void
+    {
+        if (($cycle['action'] ?? '') !== 'queue_task' || !($cycle['task'] ?? null) instanceof \App\Domain\Entity\HarnessTask) return;
+        try {
+            $workers = $this->container->get(WorkerService::class);
+            if (!$workers->hasActiveHarnessTask((int)$cycle['task']->id)) $workers->enqueue('harness_task', ['task_id' => $cycle['task']->id]);
+        } catch (\Throwable $e) {
+            $cycle['gate_passed'] = false;
+            $cycle['summary'] = 'Không thể gửi task vào Workers: ' . $e->getMessage();
+        }
     }
 
 }

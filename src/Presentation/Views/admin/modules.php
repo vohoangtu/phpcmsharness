@@ -29,7 +29,7 @@ declare(strict_types=1);
 </div>
 
 <div class="wp-card">
-    <table class="wp-table wp-plugins-table">
+    <table class="wp-table wp-plugins-table wp-modules-table">
         <thead>
             <tr>
                 <th style="width: 280px;">Chức năng (Module)</th>
@@ -41,7 +41,7 @@ declare(strict_types=1);
         <tbody>
             <?php foreach ($modules as $mod): ?>
                 <tr class="<?= $mod->isEnabled ? 'plugin-active' : 'plugin-inactive' ?>">
-                    <td>
+                    <td data-label="Module">
                         <div class="wp-plugin-title">
                             <span class="wp-plugin-icon"><?= $mod->icon ?></span>
                             <div>
@@ -50,20 +50,20 @@ declare(strict_types=1);
                             </div>
                         </div>
                     </td>
-                    <td>
+                    <td data-label="Mô tả">
                         <p class="wp-mb-8"><?= htmlspecialchars($mod->description) ?></p>
                         <?php if ($mod->dependsOn !== null): ?>
                             <small class="wp-dep-tag">🔗 Phụ thuộc vào module: <strong><?= htmlspecialchars($mod->dependsOn->label()) ?></strong></small>
                         <?php endif; ?>
                     </td>
-                    <td>
+                    <td data-label="Trạng thái">
                         <?php if ($mod->isEnabled): ?>
                             <span class="wp-status-badge badge-success">● Đang hoạt động</span>
                         <?php else: ?>
                             <span class="wp-status-badge badge-danger">○ Đã tắt</span>
                         <?php endif; ?>
                     </td>
-                    <td style="text-align:right;">
+                    <td data-label="Thao tác" style="text-align:right;">
                         <form method="POST" action="/admin/modules/toggle" style="display:inline-flex; align-items:center; gap:10px;">
             <?= \App\Presentation\Http\Csrf::field() ?>
                             <input type="hidden" name="module_key" value="<?= htmlspecialchars($mod->key->value) ?>">

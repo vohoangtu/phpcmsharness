@@ -8,6 +8,7 @@ use App\Presentation\Controller\Admin\AuthController;
 use App\Presentation\Controller\Admin\CommentController;
 use App\Presentation\Controller\Admin\DashboardController;
 use App\Presentation\Controller\Admin\HarnessController;
+use App\Presentation\Controller\Admin\WorkersController;
 use App\Presentation\Controller\Admin\MediaController;
 use App\Presentation\Controller\Admin\ModuleController;
 use App\Presentation\Controller\Admin\OrderController;
@@ -27,6 +28,15 @@ use App\Presentation\Http\Router;
 use App\Presentation\Http\SecurityHeaders;
 use App\Presentation\Http\SessionBootstrap;
 use App\Presentation\View\ViewRenderer;
+
+$updateMaintenanceFile = dirname(__DIR__) . '/storage/update-maintenance.json';
+if (PHP_SAPI !== 'cli' && is_file($updateMaintenanceFile)) {
+    http_response_code(503);
+    header('Retry-After: 60');
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Website đang cập nhật</title><body><main><h1>Website đang được cập nhật</h1><p>Vui lòng thử lại sau ít phút. Nếu tình trạng kéo dài do tiến trình cập nhật bị dừng, quản trị viên có thể khôi phục bằng lệnh <code>php bin/tuzygent update:recover</code>.</p></main></body></html>';
+    exit;
+}
 
 // Serve static files directly when using PHP built-in web server
 if (PHP_SAPI === 'cli-server') {
@@ -106,6 +116,7 @@ $authCtrl = new AuthController($container, $view);
 $dashCtrl = new DashboardController($container, $view);
 $modCtrl = new ModuleController($container, $view);
 $harnessCtrl = new HarnessController($container, $view);
+$workersCtrl = new WorkersController($container, $view);
 $postCtrl = new PostController($container, $view);
 $prodCtrl = new ProductController($container, $view);
 $taxCtrl = new TaxonomyController($container, $view);
@@ -128,7 +139,9 @@ $router->post('/admin/modules/toggle', [$modCtrl, 'toggle'], null, true);
 // Tuzygent AI Autonomous Code Harness (Protected by ModuleKey::HARNESS)
 $router->get('/admin/harness', [$harnessCtrl, 'index'], ModuleKey::HARNESS, true);
 $router->post('/admin/harness/create', [$harnessCtrl, 'createTask'], ModuleKey::HARNESS, true);
+$router->post('/admin/harness/api-config', [$harnessCtrl, 'saveApiConfig'], ModuleKey::HARNESS, true);
 $router->post('/admin/harness/run/{id}', [$harnessCtrl, 'runTask'], ModuleKey::HARNESS, true);
+$router->post('/admin/harness/install/{id}', [$harnessCtrl, 'installUpdate'], ModuleKey::HARNESS, true);
 $router->post('/admin/harness/verify', [$harnessCtrl, 'verify'], ModuleKey::HARNESS, true);
 $router->post('/admin/harness/snapshot', [$harnessCtrl, 'createSnapshot'], ModuleKey::HARNESS, true);
 $router->post('/admin/harness/rollback', [$harnessCtrl, 'rollback'], ModuleKey::HARNESS, true);
@@ -136,6 +149,9 @@ $router->post('/admin/harness/delete/{id}', [$harnessCtrl, 'deleteTask'], Module
 $router->post('/admin/harness/continuous/toggle', [$harnessCtrl, 'toggleContinuous'], ModuleKey::HARNESS, true);
 $router->post('/admin/harness/continuous/tick', [$harnessCtrl, 'continuousTick'], ModuleKey::HARNESS, true);
 $router->get('/admin/harness/continuous/status', [$harnessCtrl, 'continuousStatus'], ModuleKey::HARNESS, true);
+$router->get('/admin/workers', [$workersCtrl, 'index'], ModuleKey::WORKERS, true);
+$router->post('/admin/workers/retry/{id}', [$workersCtrl, 'retry'], ModuleKey::WORKERS, true);
+$router->post('/admin/workers/cancel/{id}', [$workersCtrl, 'cancel'], ModuleKey::WORKERS, true);
 
 // Posts Management
 $router->get('/admin/posts', [$postCtrl, 'index'], ModuleKey::POSTS, true);
@@ -150,6 +166,8 @@ $router->get('/admin/products', [$prodCtrl, 'index'], ModuleKey::PRODUCTS, true)
 $router->get('/admin/products/create', [$prodCtrl, 'create'], ModuleKey::PRODUCTS, true);
 $router->get('/admin/products/edit/{id}', [$prodCtrl, 'edit'], ModuleKey::PRODUCTS, true);
 $router->post('/admin/products/save', [$prodCtrl, 'save'], ModuleKey::PRODUCTS, true);
+$router->post('/admin/products/upload-image', [$prodCtrl, 'uploadImage'], ModuleKey::PRODUCTS, true);
+$router->get('/admin/products/media-library', [$prodCtrl, 'mediaLibrary'], ModuleKey::PRODUCTS, true);
 $router->post('/admin/products/status/{id}', [$prodCtrl, 'changeStatus'], ModuleKey::PRODUCTS, true);
 $router->post('/admin/products/delete/{id}', [$prodCtrl, 'delete'], ModuleKey::PRODUCTS, true);
 
@@ -164,6 +182,13 @@ $router->post('/admin/tags/delete/{id}', [$taxCtrl, 'deleteTag'], ModuleKey::CAT
 // Media Library
 $router->get('/admin/media', [$mediaCtrl, 'index'], ModuleKey::MEDIA, true);
 $router->post('/admin/media/upload', [$mediaCtrl, 'upload'], ModuleKey::MEDIA, true);
+$router->post('/admin/media/upload-json', [$mediaCtrl, 'uploadJson'], ModuleKey::MEDIA, true);
+$router->get('/admin/media/library-json', [$mediaCtrl, 'libraryJson'], ModuleKey::MEDIA, true);
+$router->post('/admin/media/delete-bulk', [$mediaCtrl, 'deleteBulk'], ModuleKey::MEDIA, true);
+$router->post('/admin/media/folders/create', [$mediaCtrl, 'createFolder'], ModuleKey::MEDIA, true);
+$router->post('/admin/media/move-bulk', [$mediaCtrl, 'moveBulk'], ModuleKey::MEDIA, true);
+$router->post('/admin/media/metadata/{id}', [$mediaCtrl, 'updateMetadata'], ModuleKey::MEDIA, true);
+$router->post('/admin/media/mark-used', [$mediaCtrl, 'markUsedJson'], ModuleKey::MEDIA, true);
 $router->post('/admin/media/delete/{id}', [$mediaCtrl, 'delete'], ModuleKey::MEDIA, true);
 
 // Orders Management

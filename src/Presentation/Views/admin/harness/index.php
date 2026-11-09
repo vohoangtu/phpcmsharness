@@ -4,6 +4,7 @@ declare(strict_types=1);
  * @var \App\Domain\Entity\HarnessTask[] $tasks
  * @var array<int, array{id: int, status: string, status_label: string, badge_class: string, attempts: int, max_attempts: int, summary: string, files_changed: string[], snapshot_id: string}> $taskProgress
  * @var array<string, array{name: string, binary: string, available: bool, description: string}> $agents
+ * @var array{base_url:string,api_key:string,model:string,configured:bool} $apiConfig
  * @var array<int, array{snapshot_id: string, label: string, created_at: string, file_count: int}> $snapshots
  * @var array{passed: bool, gates: array<string, array{passed: bool, title: string, details: string}>, summary: string} $gateReport
  * @var array<string, mixed> $continuousState
@@ -42,6 +43,20 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
     </div>
 </div>
 
+<div class="wp-card wp-mb-20">
+    <div class="wp-card-header"><h2>🔑 OpenAI-compatible API</h2><span class="wp-status-badge <?= $apiConfig['configured'] ? 'badge-success' : 'badge-warning' ?>"><?= $apiConfig['configured'] ? 'Đã cấu hình' : 'Chưa cấu hình' ?></span></div>
+    <form method="POST" action="/admin/harness/api-config">
+        <?= \App\Presentation\Http\Csrf::field() ?>
+                    <div class="wp-grid-2">
+            <div class="wp-form-group"><label for="api-base-url">Base URL</label><input id="api-base-url" name="base_url" type="url" required class="wp-input" value="<?= htmlspecialchars($apiConfig['base_url']) ?>" placeholder="https://api.openai.com/v1"></div>
+            <div class="wp-form-group"><label for="api-model">Model</label><input id="api-model" name="model" required class="wp-input" value="<?= htmlspecialchars($apiConfig['model']) ?>" placeholder="gpt-4o-mini"></div>
+        </div>
+        <div class="wp-form-group"><label for="api-key">API key <?= $apiConfig['configured'] ? '(để trống để giữ key hiện tại)' : '' ?></label><input id="api-key" name="api_key" type="password" class="wp-input" autocomplete="new-password" placeholder="sk-..."></div>
+        <button type="submit" class="wp-btn wp-btn-primary">Lưu cấu hình API</button>
+        <p class="wp-text-muted">Key được lưu trong <code>.harness/api_config.json</code> trên máy chủ với quyền chỉ chủ sở hữu đọc/ghi.</p>
+    </form>
+</div>
+
 <!-- 1. 3-STAGE VERIFICATION GATE STATUS -->
 <div class="wp-stats-grid">
     <?php foreach ($gateReport['gates'] as $gate): ?>
@@ -56,7 +71,7 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
 </div>
 
 <!-- 1.5 CONTINUOUS AUTONOMOUS MODE CONTROL CENTER -->
-<div class="wp-card wp-mb-20" style="border-left: 4px solid <?= $cEnabled ? '#008a20' : '#2271b1' ?>;">
+<div class="wp-card wp-mb-20 harness-continuous-card" style="border-left: 4px solid <?= $cEnabled ? '#008a20' : '#2271b1' ?>;">
     <div class="wp-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
         <div style="display:flex; align-items:center; gap:10px;">
             <h2 style="margin:0;">🔄 Chế độ Tự Hành Liên Tục — Continuous Autonomous Mode (24/7 Loop)</h2>
@@ -65,11 +80,11 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
                 <span class="wp-tag-chip">Daemon PID: <code><?= (int) $continuousState['pid'] ?></code></span>
             <?php endif; ?>
         </div>
-        <span class="wp-tag-chip">CLI: <code>./bin/tuzygent continuous</code></span>
+        <span class="wp-tag-chip">Harness Continuous</span>
     </div>
 
     <div class="wp-grid-2" style="align-items:start; gap:20px;">
-        <div>
+        <div class="harness-continuous-controls">
             <form method="POST" action="/admin/harness/continuous/toggle">
             <?= \App\Presentation\Http\Csrf::field() ?>
                 <div class="wp-grid-2">
@@ -86,8 +101,9 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
                         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px 12px; font-size:13px;">
                             Chu kỳ: <strong id="stat-cycles"><?= (int) ($continuousState['cycles_completed'] ?? 0) ?></strong> •
                             Tasks: <strong id="stat-tasks"><?= (int) ($continuousState['tasks_executed'] ?? 0) ?></strong>
-                            (<span style="color:#008a20;">Pass: <strong id="stat-passed"><?= (int) ($continuousState['tasks_succeeded'] ?? 0) ?></strong></span> /
-                            <span style="color:#d63638;">Rollback: <strong id="stat-rollback"><?= (int) ($continuousState['tasks_rolled_back'] ?? 0) ?></strong></span>)
+                            (<span style="color:#008a20;">Đạt Gate: <strong id="stat-passed"><?= (int) ($continuousState['tasks_succeeded'] ?? 0) ?></strong></span> /
+                            <span style="color:#d63638;">Lỗi: <strong id="stat-failed"><?= (int) ($continuousState['tasks_failed'] ?? 0) ?></strong></span> /
+                            <span style="color:#b45309;">Rollback: <strong id="stat-rollback"><?= (int) ($continuousState['tasks_rolled_back'] ?? 0) ?></strong></span>)
                         </div>
                     </div>
                 </div>
@@ -95,7 +111,7 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
                 <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:14px; font-size:13.5px;">
                     <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                         <input type="checkbox" name="auto_discover" id="continuous-autodiscover" value="1" <?= $cAutoDiscover ? 'checked' : '' ?>>
-                        <span>🔭 <strong>Auto-Discover / Brainstorm</strong> (mặc định bật): Quét source PHP để tạo backlog từ TODO/FIXME, service chưa có dấu vết trong test và tệp lớn bất thường; coding CLI khả dụng sẽ triển khai từng đề tài và brainstorm tiếp khi hết tín hiệu.</span>
+                        <span>🔭 <strong>Auto-Discover / Brainstorm</strong> (mặc định bật): Quét source để tạo backlog từ TODO/FIXME và các dấu hiệu cần cải thiện; API đã cấu hình sẽ triển khai đề tài.</span>
                     </label>
                     <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                         <input type="checkbox" name="auto_heal_on_drift" value="1" <?= $cAutoHeal ? 'checked' : '' ?>>
@@ -103,7 +119,7 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
                     </label>
                     <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                         <input type="checkbox" name="spawn_daemon" value="1" <?= $cDaemonAlive ? 'checked' : '' ?>>
-                        <span>⚙️ <strong>Chạy ngầm Background CLI Daemon</strong> (<code>bin/tuzygent continuous</code> chạy độc lập ngay cả khi đóng trình duyệt).</span>
+                        <span>⚙️ <strong>Chạy ngầm Background Daemon</strong> để xử lý backlog liên tục.</span>
                     </label>
                 </div>
 
@@ -127,14 +143,14 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
             </form>
         </div>
 
-        <div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <div class="harness-telemetry">
+            <div class="harness-telemetry-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                 <strong style="font-size:13px;">📡 Nhật ký Continuous Telemetry &amp; Heartbeat</strong>
                 <small class="wp-text-muted">Heartbeat: <code id="stat-heartbeat"><?= htmlspecialchars((string) ($continuousState['last_heartbeat'] ?: 'Chưa có')) ?></code></small>
             </div>
-            <div id="continuous-log-box" style="background:#1d2327; color:#50fa7b; font-family:monospace; font-size:12px; padding:10px 12px; border-radius:6px; height:150px; overflow-y:auto; line-height:1.5;">
+            <div id="continuous-log-box" class="harness-log-box" style="background:#1d2327; color:#50fa7b; font-family:monospace; font-size:12px; padding:10px 12px; border-radius:6px; height:150px; overflow-y:auto; line-height:1.5;">
                 <?php if (empty($cEvents)): ?>
-                    <div style="color:#94a3b8;">[Idle] Chế độ Continuous đang chờ kích hoạt. Nhấn "Bật Continuous Mode" hoặc chạy `./bin/tuzygent continuous`...</div>
+                <div style="color:#94a3b8;">[Idle] Chế độ Continuous đang chờ kích hoạt.</div>
                 <?php else: ?>
                     <?php foreach ($cEvents as $ev): ?>
                         <div><?= htmlspecialchars((string) $ev) ?></div>
@@ -145,24 +161,24 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
     </div>
 </div>
 
-<div class="wp-editor-layout">
+<div class="wp-editor-layout harness-editor-layout">
     <!-- Left Column: Create Task + Backlog & Evolution History -->
     <div class="wp-editor-main">
         <!-- Create New Autonomous Evolution Task -->
         <div class="wp-card wp-mb-20">
             <div class="wp-card-header">
                 <h2>🚀 Giao nhiệm vụ Tự phát triển Source Code mới (Tuzygent Task Spec)</h2>
-                <span class="wp-tag-chip">CLI tương đương: <code>./bin/tuzygent run</code></span>
+            <span class="wp-tag-chip">Agent tạo gói · Dashboard cài đặt</span>
             </div>
-            <form method="POST" action="/admin/harness/create">
+            <form method="POST" action="/admin/harness/create" class="harness-task-form">
             <?= \App\Presentation\Http\Csrf::field() ?>
                 <div class="wp-grid-2">
                     <div class="wp-form-group">
                         <label for="task-action-type">Loại tác vụ tự phát triển *</label>
                         <select name="action_type" id="task-action-type" class="wp-select" style="width:100%;">
-                            <option value="scaffold_module">🏗️ Sinh phân hệ Hexagonal mới (Entity + Port + SQLite Adapter + Service)</option>
-                            <option value="agent_prompt">🤖 Giao đặc tả tùy chỉnh cho AI Agent CLI (.harness/ Prompt Loop)</option>
-                            <option value="research_and_develop">🔭 Tự nghiên cứu đề tài &amp; triển khai tính năng bằng AI Agent</option>
+                            <option value="agent_prompt">🤖 Giao đặc tả tùy chỉnh cho AI qua API</option>
+                            <option value="research_and_develop">🔭 Nghiên cứu đề tài &amp; triển khai qua AI API</option>
+                            <option value="scaffold_module">🏗️ Sinh phân hệ Hexagonal mới (Built-in)</option>
                             <option value="self_audit">🔍 Kiểm toán &amp; Bảo chứng Kiến trúc Hexagonal (Self-Audit)</option>
                         </select>
                     </div>
@@ -179,10 +195,10 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
                     </div>
                     <div class="wp-form-group">
                         <label for="task-agent-backend">Chọn AI Agent Runner</label>
-                        <div style="display:flex; gap:8px;">
+                        <div class="harness-runner-control" style="display:flex; gap:8px;">
                             <select name="agent_backend" id="task-agent-backend" class="wp-select" style="flex:1;">
                                 <?php foreach ($agents as $aKey => $aInfo): ?>
-                                    <option value="<?= htmlspecialchars($aKey) ?>">
+                                    <option value="<?= htmlspecialchars($aKey) ?>" <?= $aKey === 'openai-compatible' ? 'selected' : '' ?>>
                                         <?= $aInfo['available'] ? '🟢' : '⚪' ?> <?= htmlspecialchars($aInfo['name']) ?>
                                     </option>
                                 <?php endforeach; ?>
@@ -200,7 +216,9 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
                     <textarea name="specification" id="task-specification" rows="3" placeholder="Mô tả các trường dữ liệu, quy tắc nghiệp vụ Domain và yêu cầu kiểm thử..." class="wp-textarea"></textarea>
                 </div>
 
-                <div style="display:flex; gap:12px; align-items:center;">
+                <p class="wp-text-muted">Harness làm việc trong staging riêng. Sau khi Gate đạt, gói cập nhật sẽ chờ bạn cài từ dashboard; website đang chạy không bị thay đổi trong lúc agent làm việc.</p>
+
+                <div class="harness-form-actions" style="display:flex; gap:12px; align-items:center;">
                     <button type="submit" name="run_immediately" value="1" class="wp-btn wp-btn-primary">
                         ⚡ Tạo &amp; Chạy Vòng Lặp Tự Phát Triển Ngay
                     </button>
@@ -219,7 +237,7 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
             <?php if (empty($tasks)): ?>
                 <p class="wp-text-muted">Chưa có nhiệm vụ nào trong Backlog.</p>
             <?php else: ?>
-                <table class="wp-table">
+                <table class="wp-table harness-task-table">
                     <thead>
                         <tr>
                             <th style="width:90px;">Mã Task</th>
@@ -233,11 +251,11 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
                         <?php foreach ($tasks as $t): ?>
                             <?php $progress = $taskProgress[(int) $t->id] ?? null; ?>
                             <tr data-harness-task-row="<?= (int) $t->id ?>">
-                                <td>
+                                <td data-label="Mã task">
                                     <strong><code><?= htmlspecialchars($t->taskCode) ?></code></strong><br>
                                     <small class="wp-text-muted" data-task-attempts>Lần thử: <?= $t->attempts ?>/<?= $t->maxAttempts ?></small>
                                 </td>
-                                <td>
+                                <td data-label="Nhiệm vụ và tiến độ">
                                     <strong><?= htmlspecialchars($t->title) ?></strong>
                                     <?php if ($t->targetName !== ''): ?>
                                         <span class="wp-tag-chip">Target: <?= htmlspecialchars($t->targetName) ?></span>
@@ -271,20 +289,27 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
                                         </details>
                                     <?php endif; ?>
                                 </td>
-                                <td><code><?= htmlspecialchars($t->agentBackend) ?></code></td>
-                                <td>
+                                <td data-label="Agent"><code><?= htmlspecialchars($t->agentBackend) ?></code></td>
+                                <td data-label="Trạng thái">
                                     <span class="wp-status-badge <?= $t->status->badgeClass() ?>" data-task-status-badge><?= $t->status->label() ?></span>
                                     <?php if ($t->snapshotId !== ''): ?>
                                         <div style="margin-top:4px;"><small class="wp-text-muted">Snap: <code><?= htmlspecialchars(substr($t->snapshotId, 0, 18)) ?></code></small></div>
                                     <?php endif; ?>
                                 </td>
-                                <td style="text-align:right;">
-                                    <form method="POST" action="/admin/harness/run/<?= $t->id ?>" style="display:inline;">
-                                        <?= \App\Presentation\Http\Csrf::field() ?>
-                                        <button type="submit" class="wp-btn wp-btn-primary wp-btn-sm">
-                                            🚀 <?= $t->attempts > 0 ? 'Chạy lại Loop' : 'Chạy Loop' ?>
-                                        </button>
-                                    </form>
+                                <td data-label="Điều khiển" style="text-align:right;">
+                                    <?php if ($t->status === \App\Domain\Enum\HarnessTaskStatus::READY_TO_INSTALL): ?>
+                                        <form method="POST" action="/admin/harness/install/<?= (int) $t->id ?>" style="display:inline;" onsubmit="return confirm('Cài gói đã vượt Gate lên website? Hệ thống sẽ sao lưu và tự khôi phục nếu health check thất bại.');">
+                                            <?= \App\Presentation\Http\Csrf::field() ?>
+                                            <button type="submit" class="wp-btn wp-btn-primary wp-btn-sm">📦 Cài cập nhật</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <form method="POST" action="/admin/harness/run/<?= (int) $t->id ?>" style="display:inline;">
+                                            <?= \App\Presentation\Http\Csrf::field() ?>
+                                            <button type="submit" class="wp-btn wp-btn-primary wp-btn-sm">
+                                                🚀 <?= $t->attempts > 0 ? 'Tạo lại gói' : 'Tạo gói cập nhật' ?>
+                                            </button>
+                                        </form>
+                                    <?php endif; ?>
                                     <?php if ($t->snapshotId !== ''): ?>
                                         <form method="POST" action="/admin/harness/rollback" style="display:inline;" onsubmit="return confirm('Khôi phục source code về Snapshot trước khi chạy Task này?');">
             <?= \App\Presentation\Http\Csrf::field() ?>
@@ -305,12 +330,12 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
         </div>
     </div>
 
-    <!-- Right Sidebar: Multi-Agent CLI Status & Snapshot Time-Machine -->
+    <!-- Right Sidebar: API Status & Snapshot Time-Machine -->
     <div class="wp-editor-sidebar">
-        <!-- Discovered AI Agent CLIs -->
+        <!-- API runner status -->
         <div class="wp-card wp-mb-20">
             <div class="wp-card-header">
-                <h2>🤖 AI Agent Runners trên máy</h2>
+                <h2>🤖 AI Runner</h2>
             </div>
             <div style="display:flex; flex-direction:column; gap:10px;">
                 <?php foreach ($agents as $key => $ag): ?>
@@ -371,8 +396,8 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
         const builtinOption = backendSelect.querySelector('option[value="builtin-hexagonal"]');
         if (builtinOption) builtinOption.disabled = researchMode;
         if (researchMode && backendSelect.value === 'builtin-hexagonal') {
-            const preferred = backendSelect.querySelector('option[value="codex"]:not(:disabled)');
-            if (preferred) backendSelect.value = 'codex';
+            const preferred = backendSelect.querySelector('option[value="openai-compatible"]:not(:disabled)');
+            if (preferred) backendSelect.value = 'openai-compatible';
         }
         if (specification && researchMode) {
             specification.placeholder = 'Đề tài / câu hỏi nghiên cứu và tính năng mong muốn. Nêu bối cảnh, người dùng, yêu cầu nghiệp vụ và giới hạn cần giữ.';
@@ -393,6 +418,7 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
     const statCycles = document.getElementById('stat-cycles');
     const statTasks = document.getElementById('stat-tasks');
     const statPassed = document.getElementById('stat-passed');
+    const statFailed = document.getElementById('stat-failed');
     const statRollback = document.getElementById('stat-rollback');
     const statHeartbeat = document.getElementById('stat-heartbeat');
     const chkAutoDiscover = document.getElementById('continuous-autodiscover');
@@ -447,6 +473,7 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
         if (statCycles) statCycles.textContent = String(st.cycles_completed ?? 0);
         if (statTasks) statTasks.textContent = String(st.tasks_executed ?? 0);
         if (statPassed) statPassed.textContent = String(st.tasks_succeeded ?? 0);
+        if (statFailed) statFailed.textContent = String(st.tasks_failed ?? 0);
         if (statRollback) statRollback.textContent = String(st.tasks_rolled_back ?? 0);
         if (statHeartbeat && st.last_heartbeat) statHeartbeat.textContent = st.last_heartbeat;
         if (logBox && Array.isArray(st.recent_events)) {

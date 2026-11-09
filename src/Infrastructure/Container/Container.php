@@ -16,6 +16,7 @@ use App\Application\Service\ProductService;
 use App\Application\Service\SubscriberService;
 use App\Application\Service\TaxonomyService;
 use App\Application\Service\TuzygentHarnessService;
+use App\Application\Service\WorkerService;
 use App\Domain\Port\Outbound\CartPort;
 use App\Domain\Port\Outbound\AuthenticationSessionPort;
 use App\Domain\Port\Outbound\CategoryRepositoryPort;
@@ -33,6 +34,7 @@ use App\Domain\Port\Outbound\SubscriberRepositoryPort;
 use App\Domain\Port\Outbound\TagRepositoryPort;
 use App\Domain\Port\Outbound\TransactionPort;
 use App\Domain\Port\Outbound\UserRepositoryPort;
+use App\Domain\Port\Outbound\WorkerJobQueuePort;
 use App\Infrastructure\Persistence\Sqlite\DatabaseManager;
 use App\Infrastructure\Persistence\Sqlite\SqliteCategoryRepository;
 use App\Infrastructure\Persistence\Sqlite\SqliteCommentRepository;
@@ -48,6 +50,7 @@ use App\Infrastructure\Persistence\Sqlite\SqliteSubscriberRepository;
 use App\Infrastructure\Persistence\Sqlite\SqliteTagRepository;
 use App\Infrastructure\Persistence\Sqlite\SqliteTransactionAdapter;
 use App\Infrastructure\Persistence\Sqlite\SqliteUserRepository;
+use App\Infrastructure\Persistence\Sqlite\SqliteWorkerJobQueue;
 use App\Infrastructure\Session\PhpSessionCartAdapter;
 use App\Infrastructure\Session\PhpAuthenticationSessionAdapter;
 use App\Infrastructure\Storage\LocalMediaStorageAdapter;
@@ -117,6 +120,7 @@ final class Container
         $this->factories[SettingRepositoryPort::class] = fn(self $c) => new SqliteSettingRepository($c->get(PDO::class));
         $this->factories[SubscriberRepositoryPort::class] = fn(self $c) => new SqliteSubscriberRepository($c->get(PDO::class));
         $this->factories[HarnessRepositoryPort::class] = fn(self $c) => new SqliteHarnessRepository($c->get(PDO::class));
+        $this->factories[WorkerJobQueuePort::class] = fn(self $c) => new SqliteWorkerJobQueue($c->get(PDO::class));
         $this->factories[LoginAttemptRepositoryPort::class] = fn(self $c) => new SqliteLoginAttemptRepository($c->get(PDO::class));
         $this->factories[TransactionPort::class] = fn(self $c) => new SqliteTransactionAdapter($c->get(PDO::class));
 
@@ -174,6 +178,12 @@ final class Container
         $this->factories[TuzygentHarnessService::class] = fn(self $c) => new TuzygentHarnessService(
             $c->get(HarnessRepositoryPort::class),
             (string) ($this->config['base_path'] ?? dirname(__DIR__, 3))
+        );
+        $this->factories[WorkerService::class] = fn(self $c) => new WorkerService(
+            $c->get(WorkerJobQueuePort::class),
+            $c->get(ModuleRegistryPort::class),
+            (string) ($this->config['base_path'] ?? dirname(__DIR__, 3)),
+            $c->get(TuzygentHarnessService::class)
         );
     }
 }

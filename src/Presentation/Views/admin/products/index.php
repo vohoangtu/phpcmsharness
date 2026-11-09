@@ -75,7 +75,7 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
             <a href="/admin/products/create" class="wp-btn wp-btn-primary">+ Thêm sản phẩm đầu tiên</a>
         </div>
     <?php else: ?>
-        <table class="wp-table">
+        <table class="wp-table products-list-table">
             <thead>
                 <tr>
                     <th style="width:70px;">Ảnh</th>
@@ -91,14 +91,14 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
             <tbody>
                 <?php foreach ($products as $prod): ?>
                     <tr>
-                        <td>
+                        <td data-label="Ảnh">
                             <?php if ($prod->featuredImage !== ''): ?>
                                 <img src="<?= htmlspecialchars($prod->featuredImage) ?>" alt="" class="wp-thumb" width="48" height="48">
                             <?php else: ?>
                                 <div class="wp-thumb-placeholder">🛍️</div>
                             <?php endif; ?>
                         </td>
-                        <td>
+                        <td data-label="Tên sản phẩm">
                             <a href="/admin/products/edit/<?= $prod->id ?>" class="wp-row-title"><?= htmlspecialchars($prod->name) ?></a>
                             <div class="wp-row-actions">
                                 <a href="/admin/products/edit/<?= $prod->id ?>">Chỉnh sửa</a> |
@@ -122,15 +122,15 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
                                 <?php endif; ?>
                             </div>
                         </td>
-                        <td><code><?= htmlspecialchars($prod->sku) ?></code></td>
-                        <td>
+                        <td data-label="Mã SKU"><code><?= htmlspecialchars($prod->sku) ?></code></td>
+                        <td data-label="Tồn kho">
                             <?php if ($prod->inStock()): ?>
                                 <span class="wp-stock-in">✔ Còn hàng (<?= $prod->stockQuantity ?>)</span>
                             <?php else: ?>
                                 <span class="wp-stock-out">✖ Hết hàng (0)</span>
                             <?php endif; ?>
                         </td>
-                        <td>
+                        <td data-label="Giá bán">
                             <?php if ($prod->isOnSale()): ?>
                                 <del class="wp-text-muted"><?= $prod->formattedRegularPrice() ?></del><br>
                                 <strong class="wp-sale-price"><?= $prod->formattedEffectivePrice() ?></strong>
@@ -138,9 +138,9 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
                                 <strong><?= $prod->formattedRegularPrice() ?></strong>
                             <?php endif; ?>
                         </td>
-                        <td><?= htmlspecialchars($prod->categoryName ?? '—') ?></td>
-                        <td><?= $prod->isFeatured ? '⭐ Nổi bật' : '—' ?></td>
-                        <td><span class="wp-status-badge <?= $prod->status->badgeClass() ?>"><?= $prod->status->label() ?></span></td>
+                        <td data-label="Danh mục"><?= htmlspecialchars($prod->categoryName ?? '—') ?></td>
+                        <td data-label="Nổi bật"><?= $prod->isFeatured ? '⭐ Nổi bật' : '—' ?></td>
+                        <td data-label="Trạng thái"><span class="wp-status-badge <?= $prod->status->badgeClass() ?>"><?= $prod->status->label() ?></span></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>

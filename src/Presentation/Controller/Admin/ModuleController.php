@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Presentation\Controller\Admin;
 
 use App\Application\Service\ModuleManagerService;
+use App\Application\Service\WorkerService;
 use App\Domain\Enum\ModuleKey;
 use App\Presentation\Controller\BaseController;
 use App\Presentation\Http\LocalRedirect;
@@ -58,6 +59,9 @@ final class ModuleController extends BaseController
         $targetState = isset($_POST['state']) ? ((string) $_POST['state'] === '1') : !$currentState;
 
         $msg = $moduleManager->setModuleState($moduleKey, $targetState);
+        if ($moduleKey === ModuleKey::WORKERS && !$targetState) {
+            try { $this->container->get(WorkerService::class)->wakeWorker(); } catch (\Throwable $e) { $msg .= ' Queue drain chưa khởi chạy: ' . $e->getMessage(); }
+        }
 
         if ($this->isAjax()) {
             $this->json([

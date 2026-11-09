@@ -16,7 +16,12 @@ final readonly class MediaFile
         public string $altText,
         public string $createdAt = '',
         public ?int $width = null,
-        public ?int $height = null
+        public ?int $height = null,
+        public ?int $folderId = null,
+        public string $folderName = '',
+        public string $tags = '',
+        public ?string $lastUsedAt = null,
+        public int $useCount = 0
     ) {
     }
 

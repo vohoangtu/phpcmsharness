@@ -37,6 +37,19 @@ final readonly class MediaService
         return $this->mediaRepository->countAll();
     }
 
+    public function folders(): array { return $this->mediaRepository->findFolders(); }
+    public function createFolder(string $name, ?int $parentId = null): int
+    {
+        $name = trim($name);
+        $length = function_exists('mb_strlen') ? mb_strlen($name, 'UTF-8') : strlen($name);
+        if ($name === '' || $length > 80) throw new \InvalidArgumentException('Tên thư mục phải có từ 1 đến 80 ký tự.');
+        return $this->mediaRepository->createFolder($name, $parentId);
+    }
+    public function moveToFolder(array $ids, ?int $folderId): void { $this->mediaRepository->moveToFolder($ids, $folderId); }
+    public function updateMetadata(int $id, string $altText, string $tags): void { $this->mediaRepository->updateMetadata($id, trim($altText), trim($tags)); }
+    public function markUsed(array $ids): void { $this->mediaRepository->markUsed(array_values(array_filter(array_map('intval', $ids), static fn(int $id): bool => $id > 0))); }
+    public function recentlyUsed(int $limit = 6): array { return $this->mediaRepository->findRecentlyUsed($limit); }
+
     /**
      * @param array<string, mixed> $uploadedFile
      */

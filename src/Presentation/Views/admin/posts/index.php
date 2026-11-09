@@ -69,7 +69,7 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
             <a href="/admin/posts/create" class="wp-btn wp-btn-primary">+ Tạo bài viết đầu tiên</a>
         </div>
     <?php else: ?>
-        <table class="wp-table">
+        <table class="wp-table posts-list-table">
             <thead>
                 <tr>
                     <th style="width:70px;">Ảnh</th>
@@ -84,14 +84,14 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
             <tbody>
                 <?php foreach ($posts as $post): ?>
                     <tr>
-                        <td>
+                        <td data-label="Ảnh">
                             <?php if ($post->featuredImage !== ''): ?>
                                 <img src="<?= htmlspecialchars($post->featuredImage) ?>" alt="" class="wp-thumb" width="48" height="48">
                             <?php else: ?>
                                 <div class="wp-thumb-placeholder">📝</div>
                             <?php endif; ?>
                         </td>
-                        <td>
+                        <td data-label="Tiêu đề và thao tác">
                             <a href="/admin/posts/edit/<?= $post->id ?>" class="wp-row-title"><?= htmlspecialchars($post->title) ?></a>
                             <div class="wp-row-actions">
                                 <a href="/admin/posts/edit/<?= $post->id ?>">Chỉnh sửa</a> |
@@ -115,15 +115,15 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
                                 <?php endif; ?>
                             </div>
                         </td>
-                        <td><?= htmlspecialchars($post->authorName) ?></td>
-                        <td><?= htmlspecialchars($post->categoryName ?? '—') ?></td>
-                        <td>
+                        <td data-label="Tác giả"><?= htmlspecialchars($post->authorName) ?></td>
+                        <td data-label="Danh mục"><?= htmlspecialchars($post->categoryName ?? '—') ?></td>
+                        <td data-label="Thẻ (Tags)">
                             <?php foreach ($post->tags as $t): ?>
                                 <span class="wp-tag-chip"><?= htmlspecialchars($t) ?></span>
                             <?php endforeach; ?>
                         </td>
-                        <td><span class="wp-status-badge <?= $post->status->badgeClass() ?>"><?= $post->status->label() ?></span></td>
-                        <td><small><?= htmlspecialchars($post->createdAt) ?></small></td>
+                        <td data-label="Trạng thái"><span class="wp-status-badge <?= $post->status->badgeClass() ?>"><?= $post->status->label() ?></span></td>
+                        <td data-label="Ngày đăng"><small><?= htmlspecialchars($post->createdAt) ?></small></td>
                     </tr>
                 <?php endforeach; ?>
             </tbody>

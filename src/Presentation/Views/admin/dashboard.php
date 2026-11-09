@@ -12,50 +12,58 @@ declare(strict_types=1);
  * @var array<string, bool> $enabledModules
  */
 ?>
-<div class="wp-page-header">
-    <div>
-        <h1 class="wp-page-title">Bảng điều khiển (Dashboard)</h1>
-        <p class="wp-page-subtitle">Quản lý tổng quan Bài viết, Sản phẩm và bật/tắt tức thì các Module theo kiến trúc Hexagonal.</p>
-    </div>
-    <div class="wp-header-actions">
-        <a href="/admin/modules" class="wp-btn wp-btn-secondary">🔌 Quản lý chi tiết Modules</a>
-        <?php if (!empty($enabledModules['posts'])): ?>
-            <a href="/admin/posts/create" class="wp-btn wp-btn-primary">+ Viết bài mới</a>
-        <?php endif; ?>
-        <?php if (!empty($enabledModules['products'])): ?>
-            <a href="/admin/products/create" class="wp-btn wp-btn-primary">+ Thêm sản phẩm</a>
-        <?php endif; ?>
-    </div>
-</div>
+<div class="wp-dashboard-home">
+    <section class="dashboard-hero">
+        <div class="dashboard-hero-copy">
+            <span class="dashboard-eyebrow"><span class="dashboard-live-dot"></span> WORKSPACE OVERVIEW</span>
+            <h1 class="wp-page-title">Chào mừng trở lại 👋</h1>
+            <p class="wp-page-subtitle">Theo dõi sức khỏe cửa hàng và quản lý công việc của bạn trong một không gian.</p>
+        </div>
+        <div class="wp-header-actions dashboard-hero-actions">
+            <a href="/admin/modules" class="wp-btn wp-btn-secondary">🔌 Quản lý Modules</a>
+            <?php if (!empty($enabledModules['posts'])): ?>
+                <a href="/admin/posts/create" class="wp-btn wp-btn-primary">＋ Viết bài mới</a>
+            <?php endif; ?>
+            <?php if (!empty($enabledModules['products'])): ?>
+                <a href="/admin/products/create" class="wp-btn wp-btn-primary">＋ Thêm sản phẩm</a>
+            <?php endif; ?>
+        </div>
+        <span class="dashboard-hero-orb dashboard-hero-orb-one" aria-hidden="true"></span>
+        <span class="dashboard-hero-orb dashboard-hero-orb-two" aria-hidden="true"></span>
+    </section>
 
 <!-- Stats Row -->
 <div class="wp-stats-grid">
-    <div class="wp-stat-card">
+    <div class="wp-stat-card stat-posts">
         <div class="wp-stat-icon">📝</div>
         <div>
+            <div class="wp-stat-label">NỘI DUNG</div>
             <div class="wp-stat-value"><?= (int) ($postCounts['all'] ?? 0) ?></div>
-            <div class="wp-stat-label">Bài viết (<?= (int) ($postCounts['published'] ?? 0) ?> xuất bản)</div>
+            <div class="wp-stat-caption">Bài viết · <?= (int) ($postCounts['published'] ?? 0) ?> đã xuất bản</div>
         </div>
     </div>
-    <div class="wp-stat-card">
+    <div class="wp-stat-card stat-products">
         <div class="wp-stat-icon">🛍️</div>
         <div>
+            <div class="wp-stat-label">SẢN PHẨM</div>
             <div class="wp-stat-value"><?= (int) ($productCounts['all'] ?? 0) ?></div>
-            <div class="wp-stat-label">Sản phẩm trong kho</div>
+            <div class="wp-stat-caption">Sản phẩm đang quản lý</div>
         </div>
     </div>
-    <div class="wp-stat-card">
+    <div class="wp-stat-card stat-orders">
         <div class="wp-stat-icon">🛒</div>
         <div>
+            <div class="wp-stat-label">ĐƠN HÀNG</div>
             <div class="wp-stat-value"><?= (int) ($orderStats['total_orders'] ?? 0) ?></div>
-            <div class="wp-stat-label">Đơn hàng (<?= number_format((float) ($orderStats['total_revenue'] ?? 0), 0, ',', '.') ?> ₫)</div>
+            <div class="wp-stat-caption">Doanh thu · <?= number_format((float) ($orderStats['total_revenue'] ?? 0), 0, ',', '.') ?> ₫</div>
         </div>
     </div>
-    <div class="wp-stat-card">
+    <div class="wp-stat-card stat-comments">
         <div class="wp-stat-icon">💬</div>
         <div>
+            <div class="wp-stat-label">TƯƠNG TÁC</div>
             <div class="wp-stat-value"><?= (int) ($commentCounts['all'] ?? 0) ?></div>
-            <div class="wp-stat-label">Bình luận &amp; Đánh giá</div>
+            <div class="wp-stat-caption">Bình luận và đánh giá</div>
         </div>
     </div>
 </div>
@@ -64,10 +72,11 @@ declare(strict_types=1);
 <section class="wp-card wp-mb-24">
     <div class="wp-card-header">
         <div>
-            <h2>⚡ Trung tâm Bật / Tắt Chức năng Nhanh (Hexagonal Feature Modules)</h2>
-            <p class="wp-text-muted">Gạt công tắc để bật hoặc tắt từng phân hệ ngay lập tức. Thanh điều hướng và giao diện khách hàng sẽ tự động cập nhật.</p>
+            <span class="dashboard-section-kicker">WORKSPACE CONTROLS</span>
+            <h2>Quản lý phân hệ</h2>
+            <p class="wp-text-muted">Bật hoặc tắt tính năng cho workspace. Điều hướng được cập nhật ngay sau khi lưu.</p>
         </div>
-        <a href="/admin/modules" class="wp-link">Xem trang Plugins/Modules →</a>
+        <a href="/admin/modules" class="wp-link">Tất cả modules <span aria-hidden="true">↗</span></a>
     </div>
     <div class="wp-module-quick-grid">
         <?php foreach ($modules as $mod): ?>
@@ -92,12 +101,14 @@ declare(strict_types=1);
                             type="checkbox"
                             class="js-module-toggle"
                             data-module="<?= htmlspecialchars($mod->key->value) ?>"
+                            aria-label="<?= htmlspecialchars(($mod->isEnabled ? 'Tắt ' : 'Bật ') . $mod->name) ?>"
                             <?= $mod->isEnabled ? 'checked' : '' ?>
                             onchange="this.form.submit()"
                         >
                         <span class="wp-slider"></span>
                     </label>
                 </form>
+                <span class="dashboard-module-state <?= $mod->isEnabled ? 'is-on' : 'is-off' ?>"><?= $mod->isEnabled ? 'Đang bật' : 'Đang tắt' ?></span>
             </div>
         <?php endforeach; ?>
     </div>
@@ -225,4 +236,5 @@ declare(strict_types=1);
             </div>
         <?php endif; ?>
     </div>
+</div>
 </div>

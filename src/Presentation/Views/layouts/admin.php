@@ -23,7 +23,7 @@ $isActive = fn(string $prefix): string => str_starts_with($currentUri, $prefix) 
     <title><?= htmlspecialchars($pageTitle ?? 'Admin') ?> ‹ <?= $siteTitle ?> — WP-Hexagon</title>
     <link rel="stylesheet" href="/assets/css/admin.css">
 </head>
-<body class="wp-admin-body">
+<body class="wp-admin-body <?= $currentUri === '/admin' ? 'wp-admin-dashboard' : '' ?>">
     <!-- Top Admin Bar (Giống WordPress) -->
     <header class="wp-topbar">
         <div class="wp-topbar-left">
@@ -70,6 +70,12 @@ $isActive = fn(string $prefix): string => str_starts_with($currentUri, $prefix) 
                         <span class="wp-nav-icon">🤖</span>
                         <span class="wp-nav-text">Tuzygent Harness</span>
                         <span class="wp-badge wp-badge-blue">AI</span>
+                    </a>
+                <?php endif; ?>
+
+                <?php if (!empty($enabledModules['workers'])): ?>
+                    <a href="/admin/workers" class="wp-nav-item <?= $isActive('/admin/workers') ?>">
+                        <span class="wp-nav-icon">⚙️</span><span class="wp-nav-text">Workers</span>
                     </a>
                 <?php endif; ?>
 
@@ -160,5 +166,6 @@ $isActive = fn(string $prefix): string => str_starts_with($currentUri, $prefix) 
     </div>
 
     <script src="/assets/js/admin.js"></script>
+    <script src="/assets/js/rich-text-editor.bundle.js" defer></script>
 </body>
 </html>

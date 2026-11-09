@@ -83,6 +83,62 @@ final class ProductController extends BaseController
         $this->redirect('/admin/products/edit/' . $savedId);
     }
 
+    public function uploadImage(): void
+    {
+        try {
+            $uploaded = $this->container->get(MediaService::class)->upload(
+                $_FILES['file'] ?? [],
+                trim((string)($_POST['alt_text'] ?? ''))
+            );
+            $this->json(['ok'=>true,'item'=>[
+                'id'=>$uploaded->id,
+                'url'=>$uploaded->filePath,
+                'alt'=>$uploaded->altText,
+                'name'=>$uploaded->originalName,
+                'width'=>$uploaded->width,
+                'height'=>$uploaded->height,
+            ]]);
+        } catch (\Throwable $e) {
+            $this->json(['ok'=>false,'error'=>$e->getMessage()], 422);
+        }
+    }
+
+    public function mediaLibrary(): void
+    {
+        $mediaService = $this->container->get(MediaService::class);
+        $pageSize = 36;
+        $search = trim((string) ($_GET['q'] ?? ''));
+        if ($search !== '') {
+            $lower = static fn(string $value): string => function_exists('mb_strtolower')
+                ? mb_strtolower($value, 'UTF-8')
+                : strtolower($value);
+            $needle = $lower($search);
+            $allItems = array_values(array_filter($mediaService->listAll(), static fn($file): bool =>
+                str_contains($lower($file->originalName), $needle)
+                || str_contains($lower($file->filePath), $needle)
+                || str_contains($lower($file->altText), $needle)
+            ));
+            $totalItems = count($allItems);
+        } else {
+            $allItems = null;
+            $totalItems = $mediaService->countAll();
+        }
+        $totalPages = max(1, (int)ceil($totalItems / $pageSize));
+        $page = min(max(1, (int)($_GET['page'] ?? 1)), $totalPages);
+        $files = $allItems === null
+            ? $mediaService->listPage($pageSize, ($page - 1) * $pageSize)
+            : array_slice($allItems, ($page - 1) * $pageSize, $pageSize);
+        $items = array_map(static fn($file): array => [
+            'id'=>$file->id,
+            'url'=>$file->filePath,
+            'alt'=>$file->altText,
+            'name'=>$file->originalName,
+            'width'=>$file->width,
+            'height'=>$file->height,
+        ], $files);
+        $this->json(['items'=>$items,'page'=>$page,'total_pages'=>$totalPages,'total'=>$totalItems]);
+    }
+
     public function changeStatus(string $id): void
     {
         $statusStr = (string) ($_POST['status'] ?? 'trash');
@@ -102,13 +158,11 @@ final class ProductController extends BaseController
     private function renderForm(mixed $product): void
     {
         $taxonomyService = $this->container->get(TaxonomyService::class);
-        $mediaService = $this->container->get(MediaService::class);
 
         $this->view->renderAdmin('admin/products/form', [
             'pageTitle' => $product ? 'Chỉnh sửa Sản phẩm' : 'Thêm Sản phẩm mới',
             'product' => $product,
             'categories' => $taxonomyService->getCategories('product'),
-            'mediaFiles' => $mediaService->listPage(6, 0),
         ]);
     }
 }

@@ -608,6 +608,7 @@ $postRoutesSource = (string) file_get_contents(dirname(__DIR__) . '/public/index
 $postControllerSource = (string) file_get_contents(dirname(__DIR__) . '/src/Presentation/Controller/Admin/PostController.php');
 $postFormSource = (string) file_get_contents(dirname(__DIR__) . '/src/Presentation/Views/admin/posts/form.php');
 $adminStylesheetSource = (string) file_get_contents(dirname(__DIR__) . '/public/assets/css/admin.css');
+$adminScriptSource = (string) file_get_contents(dirname(__DIR__) . '/public/assets/js/admin.js');
 $routerSource = (string) file_get_contents(dirname(__DIR__) . '/src/Presentation/Http/Router.php');
 preg_match('/public function create\(\): void\s*\{(?P<body>.*?)\n    \}/s', $postControllerSource, $createMethodMatch);
 $createMethodBody = $createMethodMatch['body'] ?? '';
@@ -830,7 +831,6 @@ $productFormControlIds = [
     'product-stock-quantity',
     'raw-content',
     'product-short-description',
-    'product-gallery-images',
     'product-status',
     'product-category',
     'product-tags',
@@ -850,21 +850,22 @@ $renderedProductFormLabelsAssociated = true;
 foreach ($productFormControlIds as $productFormControlId) {
     if (!preg_match('~<label\\b(?=[^>]*\\bfor="' . preg_quote($productFormControlId, '~') . '")[^>]*>~', $renderedProductFormMarkup)
         || !preg_match('~<(?:input|select|textarea)\\b(?=[^>]*\\bid="' . preg_quote($productFormControlId, '~') . '")[^>]*>~', $renderedProductFormMarkup)
-        || substr_count($renderedProductFormMarkup, 'id="' . $productFormControlId . '"') !== 1) {
+        || substr_count($renderedProductFormMarkup, ' id="' . $productFormControlId . '"') !== 1) {
         $renderedProductFormLabelsAssociated = false;
     }
 }
 assertTrue(
     $renderedProductFormLabelsAssociated
         && str_contains($renderedProductFormMarkup, 'aria-labelledby="product-description-label"')
+        && preg_match('~<textarea\b(?=[^>]*\bid="product-gallery-images")(?=[^>]*\bhidden(?:\s|>))[^>]*>~', $renderedProductFormMarkup) === 1
         && str_contains($renderedProductFormMarkup, '<label class="wp-checkbox-label">')
         && substr_count($renderedProductFormMarkup, 'name="is_featured"') === 1
         && substr_count($renderedProductFormMarkup, 'id="featured-preview-img"') === 1
-        && preg_match('~<img src="" id="featured-preview-img" alt="" style="display:none;">~', $renderedProductFormMarkup) === 1,
-    'Rendered admin product form exposes visible labels for all fourteen data controls, a named visual editor, and its wrapped checkbox label'
+        && preg_match('~<img src="" id="featured-preview-img" alt="Ảnh sản phẩm chính" style="display:none;">~', $renderedProductFormMarkup) === 1,
+    'Rendered admin product form labels user-editable controls and names its editor while keeping the gallery backing field hidden'
 );
 assertTrue(
-    preg_match('~<img src="" id="featured-preview-img" alt="" style="display:none;">~', $renderedProductFormMarkup) === 1
+    preg_match('~<img src="" id="featured-preview-img" alt="Ảnh sản phẩm chính" style="display:none;">~', $renderedProductFormMarkup) === 1
         && preg_match('~<img\b(?=[^>]*\bid="featured-preview-img")[^>]*\b(?:width|height)\s*=~', $renderedProductFormMarkup) !== 1
         && preg_match('/\.wp-featured-preview img\s*\{[^}]*width:\s*100%;[^}]*aspect-ratio:\s*16\s*\/\s*9;/s', $adminStylesheetSource) === 1,
     'Product featured-image preview reserves its responsive CSS aspect ratio without guessing dimensions for a dynamic image URL'
@@ -873,7 +874,7 @@ $renderedProductFormHeadingRanks = [];
 preg_match_all('~<h([1-6])(?:\s|>)~', $renderedProductFormMarkup, $renderedProductFormHeadingMatches);
 $renderedProductFormHeadingRanks = $renderedProductFormHeadingMatches[1] ?? [];
 assertTrue(
-    $renderedProductFormHeadingRanks === ['1', '2', '2', '2', '2', '2', '2'],
+    $renderedProductFormHeadingRanks === ['1', '2', '2', '2', '2', '2', '2', '2', '2', '2'],
     'Rendered admin product form starts with its page title and uses second-level headings for peer editor and sidebar sections'
 );
 $productFormMedia = [
@@ -906,22 +907,26 @@ $renderedProductFormWithMedia = (static function () use ($productFormMedia): str
     return (string) ob_get_clean();
 })();
 assertTrue(
-    str_contains($renderedProductFormWithMedia, 'src="/uploads/media.png"')
-        && str_contains($renderedProductFormWithMedia, 'alt="Mô tả &amp; &quot;ảnh&quot;"')
-        && str_contains($renderedProductFormWithMedia, 'src="/uploads/decorative.png"')
-        && str_contains($renderedProductFormWithMedia, 'alt=""')
-        && preg_match('~<img\b(?=[^>]*\bsrc="/uploads/media\.png")[^>]*\b(?:width|height)\s*=~', $renderedProductFormWithMedia) !== 1
-        && preg_match('/\.wp-media-mini-grid img\s*\{[^}]*width:\s*100%;[^}]*height:\s*55px;[^}]*object-fit:\s*cover;/s', $adminStylesheetSource) === 1,
-    'Rendered product media-picker thumbnails include escaped supplied alt text and preserve an empty alt value'
+    str_contains($renderedProductFormWithMedia, 'id="product-media-grid"')
+        && str_contains($renderedProductFormWithMedia, 'data-media-detail-image alt=""')
+        && str_contains($adminScriptSource, 'image.alt = item.alt || \'\'')
+        && str_contains($adminScriptSource, 'caption.textContent = item.name || item.url')
+        && preg_match('/\.product-media-choice img\s*\{[^}]*object-fit:\s*contain;/s', $adminStylesheetSource) === 1,
+    'Product media picker loads thumbnails from the library API with escaped captions and meaningful alt text'
 );
 $sanitizedProductDescription = \App\Presentation\Security\HtmlContentSanitizer::sanitize(
     '<p><strong>Bold</strong><script>alert(1)</script><img src=x onerror="alert(2)"><a href="javascript:alert(3)" onclick="alert(4)">Link</a></p>'
 );
+$sanitizedResizableProductImage = \App\Presentation\Security\HtmlContentSanitizer::sanitize(
+    '<p><img src="/uploads/resized-product.jpg" alt="Resized product" width="320" height="180"></p>'
+);
 assertTrue(
     str_contains($sanitizedProductDescription, '<p><strong>Bold</strong>')
         && str_contains($sanitizedProductDescription, '<a>Link</a>')
-        && !preg_match('/<script|<img|onerror|onclick|javascript:/i', $sanitizedProductDescription),
-    'Shared HTML content sanitizer preserves allowed rich formatting and removes script, event-handler, image, and unsafe-link payloads'
+        && str_contains($sanitizedProductDescription, '<img src="x" alt="x" />')
+        && !preg_match('/<script|onerror|onclick|javascript:/i', $sanitizedProductDescription)
+        && str_contains($sanitizedResizableProductImage, '<img src="/uploads/resized-product.jpg" alt="Resized product" width="320" height="180" />'),
+    'Shared HTML content sanitizer keeps resized image dimensions while removing scripts, event handlers, and unsafe links'
 );
 $blogPost = new \App\Domain\Entity\Post(
     id: 34,
@@ -952,9 +957,10 @@ assertTrue(
     str_contains($renderedBlogBody, '<h2>Details</h2>')
         && str_contains($renderedBlogBody, '<strong>Safe formatting</strong>')
         && str_contains($renderedBlogBody, '<a href="https://example.com" title="Reference">Link</a>')
+        && str_contains($renderedBlogBody, '<img src="x" alt="x" />')
         && str_contains($renderedBlogBody, 'Unsafe link')
-        && !preg_match('/<script|<img|onerror|onclick|javascript:/i', $renderedBlogBody),
-    'Rendered blog article keeps allowed rich HTML and safe links while removing dangerous markup and attributes at the template sink'
+        && !preg_match('/<script|onerror|onclick|javascript:/i', $renderedBlogBody),
+    'Rendered blog article keeps allowed rich HTML, images, and safe links while stripping dangerous markup and attributes'
 );
 $renderedProductDescription = (static function (): string {
     $product = new \App\Domain\Entity\Product(
@@ -984,8 +990,9 @@ assertTrue(
     str_contains($renderedProductDescription, '<h2>Details</h2>')
         && str_contains($renderedProductDescription, '<strong>Safe formatting</strong>')
         && str_contains($renderedProductDescription, '<a href="https://example.com">Reference</a>')
-        && !preg_match('/<script|<img|onerror|onclick|javascript:/i', $renderedProductDescription),
-    'Storefront product description keeps editorial formatting and safe links while removing dangerous HTML payloads'
+        && str_contains($renderedProductDescription, '<img src="x" alt="x" />')
+        && !preg_match('/<script|onerror|onclick|javascript:/i', $renderedProductDescription),
+    'Storefront product description keeps editorial formatting, images, and safe links while stripping dangerous HTML payloads'
 );
 $renderedProductDescriptionWithActiveContent = (static function (): string {
     $product = new \App\Domain\Entity\Product(
@@ -1024,10 +1031,11 @@ assertTrue(
         && str_contains($renderedProductDescriptionWithActiveContent, '<blockquote>Editorial quote</blockquote>')
         && str_contains($renderedProductDescriptionWithActiveContent, '<a href="mailto:support@example.com" title="Contact support">Email support</a>')
         && str_contains($renderedProductDescriptionWithActiveContent, '>Obfuscated unsafe URI</a>')
+        && str_contains($renderedProductDescriptionWithActiveContent, '<iframe></iframe>')
         && !str_contains($renderedProductDescriptionWithActiveContent, 'target="_blank"')
         && !str_contains($renderedProductDescriptionWithActiveContent, 'data-track=')
-        && !preg_match('/<svg|<iframe|<style|<script|onload|onmouseover|onclick|javascript:|data:text\/html/i', $renderedProductDescriptionWithActiveContent),
-    'Storefront product description retains allowed editor formatting and mail links while neutralizing direct and entity-obfuscated active HTML payloads'
+        && !preg_match('/<svg|<iframe\s+src=|<style|<script|onload|onmouseover|onclick|javascript:|data:text\/html/i', $renderedProductDescriptionWithActiveContent),
+    'Storefront product description retains allowed formatting and links while neutralizing unsafe URI and embedded-content payloads'
 );
 $productFormWithUntrustedDescription = (static function (): string {
     $product = new \App\Domain\Entity\Product(
@@ -1055,27 +1063,25 @@ $productFormWithUntrustedDescription = (static function (): string {
     return (string) ob_get_clean();
 })();
 assertTrue(
-    str_contains($productFormWithUntrustedDescription, '<p>Safe</p>')
+    str_contains($productFormWithUntrustedDescription, '&lt;p&gt;Safe&lt;/p&gt;')
         && !str_contains($productFormWithUntrustedDescription, '<script>alert(1)</script>')
         && str_contains($productFormWithUntrustedDescription, '&lt;script&gt;alert(1)&lt;/script&gt;'),
-    'Admin product form sanitizes the visual editor and HTML-escapes the editable source textarea'
+    'Admin product form safely escapes the editable source for the visual editor'
 );
 assertTrue(
     substr_count($productFormWithUntrustedDescription, 'id="featured-preview-img"') === 1
-        && preg_match('~<img src="/uploads/featured\.png\?size=large&amp;fit=crop" id="featured-preview-img" alt="">~', $productFormWithUntrustedDescription) === 1,
+        && preg_match('~<img src="/uploads/featured\.png\?size=large&amp;fit=crop" id="featured-preview-img" alt="Ảnh sản phẩm chính">~', $productFormWithUntrustedDescription) === 1,
     'Rendered admin product form emits one visible preview image with an escaped saved URL'
 );
 $productFeaturedImageTag = [];
-$productMediaThumbnailTag = [];
 preg_match('~<img\b(?=[^>]*\bid="featured-preview-img")[^>]*>~', $productFormWithUntrustedDescription, $productFeaturedImageTag);
-preg_match('~<img\b(?=[^>]*\bsrc="/uploads/media\.png")[^>]*>~', $renderedProductFormWithMedia, $productMediaThumbnailTag);
 assertTrue(
-    isset($productFeaturedImageTag[0], $productMediaThumbnailTag[0])
+    isset($productFeaturedImageTag[0])
         && !preg_match('/\s(?:width|height)\s*=/', $productFeaturedImageTag[0])
-        && !preg_match('/\s(?:width|height)\s*=/', $productMediaThumbnailTag[0])
         && preg_match('/\.wp-featured-preview img\s*\{[^}]*width:\s*100%;[^}]*aspect-ratio:\s*16\s*\/\s*9;[^}]*max-height:\s*190px;/s', $adminStylesheetSource) === 1
-        && preg_match('/\.wp-media-mini-grid img\s*\{[^}]*width:\s*100%;[^}]*height:\s*55px;[^}]*object-fit:\s*cover;/s', $adminStylesheetSource) === 1,
-    'TZY-354: rendered product preview and media thumbnails reserve layout space in CSS without guessed intrinsic dimensions'
+        && str_contains($renderedProductFormWithMedia, 'data-media-detail-image alt=""')
+        && preg_match('/\.product-media-dialog \.product-media-choice img\s*\{[^}]*aspect-ratio:\s*1\s*\/\s*1;/s', $adminStylesheetSource) === 1,
+    'TZY-354: product preview and API-loaded media thumbnails reserve layout space in CSS without guessed intrinsic dimensions'
 );
 $renderedProductIndexMarkup = (static function (): string {
     $products = [];
@@ -3118,12 +3124,6 @@ $regressionTestRoot = sys_get_temp_dir() . '/tuzygent-topic-regression-' . bin2h
 mkdir($regressionTestRoot . '/src', 0775, true);
 file_put_contents($regressionTestRoot . '/src/Fixture.php', "<?php\nclass Fixture {}\n");
 $regressionTarget = 'CmsStrictTypes' . substr(sha1('src/Fixture.php'), 0, 12);
-$regressionFakeBin = $regressionTestRoot . '/bin';
-mkdir($regressionFakeBin, 0775, true);
-file_put_contents($regressionFakeBin . '/claude', "#!/bin/sh\nexit 0\n");
-chmod($regressionFakeBin . '/claude', 0775);
-$regressionPreviousPath = getenv('PATH');
-putenv('PATH=' . $regressionFakeBin);
 
 $completedTopicRepository = new \App\Infrastructure\Persistence\Sqlite\SqliteHarnessRepository(new PDO('sqlite::memory:'));
 $completedTopicRepository->save(new \App\Domain\Entity\HarnessTask(
@@ -3133,13 +3133,14 @@ $completedTopicRepository->save(new \App\Domain\Entity\HarnessTask(
     specification: '',
     actionType: 'research_and_develop',
     targetName: $regressionTarget,
-    agentBackend: 'claude',
+    agentBackend: 'openai-compatible',
     status: \App\Domain\Enum\HarnessTaskStatus::COMPLETED,
     attempts: 1,
     maxAttempts: 3,
     snapshotId: ''
 ));
 $completedTopicHarness = new \App\Application\Service\TuzygentHarnessService($completedTopicRepository, $regressionTestRoot);
+$completedTopicHarness->saveApiConfig(['base_url' => 'https://example.test/v1', 'api_key' => 'fixture-key', 'model' => 'fixture-model']);
 $rediscoveredTopicId = $completedTopicHarness->discoverNextEvolutionTask();
 $rediscoveredTopic = $rediscoveredTopicId === null ? null : $completedTopicHarness->getTask($rediscoveredTopicId);
 assertTrue(
@@ -3158,13 +3159,14 @@ $activeTopicRepository->save(new \App\Domain\Entity\HarnessTask(
     specification: '',
     actionType: 'research_and_develop',
     targetName: $regressionTarget,
-    agentBackend: 'claude',
+    agentBackend: 'openai-compatible',
     status: \App\Domain\Enum\HarnessTaskStatus::BACKLOG,
     attempts: 0,
     maxAttempts: 3,
     snapshotId: ''
 ));
 $activeTopicHarness = new \App\Application\Service\TuzygentHarnessService($activeTopicRepository, $activeTopicRoot);
+$activeTopicHarness->saveApiConfig(['base_url' => 'https://example.test/v1', 'api_key' => 'fixture-key', 'model' => 'fixture-model']);
 $activeDiscoveryId = $activeTopicHarness->discoverNextEvolutionTask();
 $activeDiscovery = $activeDiscoveryId === null ? null : $activeTopicHarness->getTask($activeDiscoveryId);
 assertTrue(
@@ -3173,19 +3175,18 @@ assertTrue(
     'AutoTopic keeps an existing backlog source target suppressed'
 );
 
-putenv('PATH=' . ($regressionPreviousPath === false ? '' : $regressionPreviousPath));
-unlink($regressionFakeBin . '/claude');
-rmdir($regressionFakeBin);
 unlink($activeTopicRoot . '/src/Fixture.php');
 rmdir($activeTopicRoot . '/src');
 rmdir($activeTopicRoot . '/storage/snapshots');
 rmdir($activeTopicRoot . '/storage');
+unlink($activeTopicRoot . '/.harness/api_config.json');
 rmdir($activeTopicRoot . '/.harness');
 rmdir($activeTopicRoot);
 unlink($regressionTestRoot . '/src/Fixture.php');
 rmdir($regressionTestRoot . '/src');
 rmdir($regressionTestRoot . '/storage/snapshots');
 rmdir($regressionTestRoot . '/storage');
+unlink($regressionTestRoot . '/.harness/api_config.json');
 rmdir($regressionTestRoot . '/.harness');
 rmdir($regressionTestRoot);
 
@@ -3207,7 +3208,7 @@ $backendHarness = new \App\Application\Service\TuzygentHarnessService(
 );
 $autoTopicId = $backendHarness->discoverNextEvolutionTask();
 $autoTopic = $autoTopicId === null ? null : $backendHarness->getTask($autoTopicId);
-assertTrue($autoTopic !== null && $autoTopic->targetName === 'AutoTopic' && $autoTopic->agentBackend === 'claude', 'AutoTopic selects the first supported CLI present when Codex is unavailable');
+assertTrue($autoTopic !== null && $autoTopic->targetName === 'Banner' && $autoTopic->agentBackend === 'builtin-hexagonal', 'AutoTopic falls back to a built-in blueprint when OpenAI-compatible API is not configured');
 putenv('PATH=' . $previousPath);
 unlink($fakeBin . '/claude');
 unlink($fakeBin . '/opencode');
@@ -3291,7 +3292,8 @@ $postSearchPdo = null;
 
 // 0.3. Verify media library pagination uses bounded queries and an accurate total.
 $mediaPagePdo = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC]);
-$mediaPagePdo->exec('CREATE TABLE media (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT NOT NULL, original_name TEXT NOT NULL, file_path TEXT NOT NULL, mime_type TEXT NOT NULL, file_size INTEGER NOT NULL, alt_text TEXT NOT NULL, created_at TEXT NOT NULL, width INTEGER NULL, height INTEGER NULL)');
+$mediaPagePdo->exec('CREATE TABLE media_folders (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, parent_id INTEGER NULL)');
+$mediaPagePdo->exec('CREATE TABLE media (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT NOT NULL, original_name TEXT NOT NULL, file_path TEXT NOT NULL, mime_type TEXT NOT NULL, file_size INTEGER NOT NULL, alt_text TEXT NOT NULL, created_at TEXT NOT NULL, width INTEGER NULL, height INTEGER NULL, folder_id INTEGER NULL, tags TEXT NOT NULL DEFAULT "")');
 $mediaPageRepository = new \App\Infrastructure\Persistence\Sqlite\SqliteMediaRepository($mediaPagePdo);
 for ($mediaIndex = 1; $mediaIndex <= 25; $mediaIndex++) {
     $mediaPageRepository->save(new \App\Domain\Entity\MediaFile(
@@ -3324,11 +3326,12 @@ assertTrue(count($mediaPageRepository->findAll(24, -5)) === 24, 'Media paginatio
 $productControllerSource = (string) file_get_contents(dirname(__DIR__) . '/src/Presentation/Controller/Admin/ProductController.php');
 $productFormSource = (string) file_get_contents(dirname(__DIR__) . '/src/Presentation/Views/admin/products/form.php');
 assertTrue(
-    str_contains($productControllerSource, "'mediaFiles' => \$mediaService->listPage(6, 0)")
-        && !str_contains($productControllerSource, "'mediaFiles' => \$mediaService->listAll()")
-        && str_contains($productFormSource, 'foreach ($mediaFiles as $mf)')
-        && !str_contains($productFormSource, 'array_slice($mediaFiles, 0, 6)'),
-    'Product form fetches only the six newest media records and renders the bounded result directly'
+    str_contains($postRoutesSource, "\$router->get('/admin/products/media-library', [\$prodCtrl, 'mediaLibrary']")
+        && str_contains($productControllerSource, '$mediaService->listPage($pageSize, ($page - 1) * $pageSize)')
+        && str_contains($productFormSource, 'id="product-media-grid"')
+        && !str_contains($productFormSource, 'foreach ($mediaFiles as $mf)')
+        && str_contains($adminScriptSource, 'fetch(`/admin/products/media-library?${params}`'),
+    'Product form loads its Media Library picker through a bounded paginated API'
 );
 $mediaPagePdo = null;
 
@@ -3616,11 +3619,17 @@ assertTrue(
     'Rendered blog layout keeps article headings one level below the page title while allowing fixed sidebar headings to retain their consistent rank'
 );
 $blogHeadingTopicTarget = 'CmsHeadingRank' . substr(sha1('src/Presentation/Views/frontend/blog/index.php'), 0, 12);
-$blogHeadingTopics = (new CmsTopicGenerator(dirname(__DIR__)))->generate();
-$blogHeadingTopic = array_values(array_filter(
-    $blogHeadingTopics,
-    static fn(array $topic): bool => $topic['target_name'] === $blogHeadingTopicTarget
-))[0] ?? null;
+$blogHeadingGenerator = new CmsTopicGenerator(dirname(__DIR__));
+$blogHeadingKnownTargets = [];
+$blogHeadingTopic = null;
+for ($discoveryBatch = 0; $discoveryBatch < 20 && $blogHeadingTopic === null; $discoveryBatch++) {
+    foreach ($blogHeadingGenerator->generate($blogHeadingKnownTargets) as $topic) {
+        $blogHeadingKnownTargets[strtolower($topic['target_name'])] = true;
+        if ($topic['target_name'] === $blogHeadingTopicTarget) {
+            $blogHeadingTopic = $topic;
+        }
+    }
+}
 assertTrue(
     $blogHeadingTopic !== null
         && $blogHeadingTopic['priority'] === 'P2'
@@ -3695,11 +3704,17 @@ assertTrue(
     'Rendered shop keeps product headings at h2 and fixed sidebar heading ranks consistent across catalogs'
 );
 $shopHeadingTopicTarget = 'CmsHeadingRank' . substr(sha1('src/Presentation/Views/frontend/shop/index.php'), 0, 12);
-$shopHeadingTopics = (new CmsTopicGenerator(dirname(__DIR__)))->generate();
-$shopHeadingTopic = array_values(array_filter(
-    $shopHeadingTopics,
-    static fn(array $topic): bool => $topic['target_name'] === $shopHeadingTopicTarget
-))[0] ?? null;
+$shopHeadingGenerator = new CmsTopicGenerator(dirname(__DIR__));
+$shopHeadingKnownTargets = [];
+$shopHeadingTopic = null;
+for ($discoveryBatch = 0; $discoveryBatch < 20 && $shopHeadingTopic === null; $discoveryBatch++) {
+    foreach ($shopHeadingGenerator->generate($shopHeadingKnownTargets) as $topic) {
+        $shopHeadingKnownTargets[strtolower($topic['target_name'])] = true;
+        if ($topic['target_name'] === $shopHeadingTopicTarget) {
+            $shopHeadingTopic = $topic;
+        }
+    }
+}
 assertTrue(
     $shopHeadingTopic !== null
         && $shopHeadingTopic['priority'] === 'P2'
@@ -3773,8 +3788,9 @@ $sanitizedBlogPostHtml = (string) ob_get_clean();
 assertTrue(
     str_contains($sanitizedBlogPostHtml, '<p><strong>Nội dung an toàn</strong>')
         && str_contains($sanitizedBlogPostHtml, '<a>liên kết</a>')
-        && !preg_match('/<script|<img|onerror|onclick|javascript:/i', $sanitizedBlogPostHtml),
-    'Rendered blog post preserves allowed formatting while removing scripts, event handlers, disallowed images, and unsafe links'
+        && str_contains($sanitizedBlogPostHtml, '<img src="x" alt="x" />')
+        && !preg_match('/<script|onerror|onclick|javascript:/i', $sanitizedBlogPostHtml),
+    'Rendered blog post preserves allowed formatting and images while stripping scripts, event handlers, and unsafe links'
 );
 
 $post->content = '<h2>Tiêu đề hợp lệ</h2><h3>Tiêu đề phụ</h3><p><strong>In đậm</strong> <em>In nghiêng</em> <u>Gạch chân</u> <a href="https://example.com">Liên kết an toàn</a> <a href="mailto:editor@example.com" title="Liên hệ">Email</a> <a href="jav&#x61;script:alert(1)">Liên kết nguy hiểm</a></p>'
@@ -3795,8 +3811,9 @@ assertTrue(
         && str_contains($contextFilteredBlogPostHtml, '<blockquote>Trích dẫn biên tập</blockquote>')
         && str_contains($contextFilteredBlogPostHtml, '<ol><li>Mục danh sách</li></ol>')
         && str_contains($contextFilteredBlogPostHtml, '<a>Liên kết nguy hiểm</a>')
-        && !preg_match('/<script|<svg|<iframe|<style|onload|onmouseover|javascript:|data:text\/html/i', $contextFilteredBlogPostHtml),
-    'Rendered blog post retains semantic formatting and safe links while removing encoded script schemes and active HTML contexts'
+        && str_contains($contextFilteredBlogPostHtml, '<iframe>Khung ngoài</iframe>')
+        && !preg_match('/<script|<svg|<iframe\s+src=|<style|onload|onmouseover|javascript:|data:text\/html/i', $contextFilteredBlogPostHtml),
+    'Rendered blog post retains semantic formatting and safe links while removing unsafe URIs and embedded content sources'
 );
 
 $post->content = 'Tài liệu AT&T: 2 < 5';
@@ -4972,13 +4989,21 @@ $currentPage = 1;
 $totalPages = 1;
 $totalItems = 0;
 $pageSize = 20;
+$query = '';
+$typeFilter = 'all';
+$sortOrder = 'newest';
+$folders = [];
+$currentFolder = null;
+$recentFiles = [];
+$recentlyUsedFiles = [];
 ob_start();
 require dirname(__DIR__) . '/src/Presentation/Views/admin/media/index.php';
 $mediaViewMarkup = (string) ob_get_clean();
 assertTrue(
-    str_contains($mediaViewMarkup, '<label for="media-upload-file">Chọn tệp hình ảnh</label>')
+    str_contains($mediaViewMarkup, '<label class="media-upload-dropzone" for="media-upload-file">')
+        && str_contains($mediaViewMarkup, 'Chọn ảnh hoặc kéo thả vào đây')
         && str_contains($mediaViewMarkup, '<input type="file" id="media-upload-file" name="file"')
-        && str_contains($mediaViewMarkup, '<label for="media-upload-alt-text">Văn bản thay thế (không bắt buộc)</label>')
+        && str_contains($mediaViewMarkup, '<label for="media-upload-alt-text">Văn bản thay thế</label>')
         && str_contains($mediaViewMarkup, '<input type="text" id="media-upload-alt-text" name="alt_text"')
         && substr_count($mediaViewMarkup, 'id="media-upload-file"') === 1
         && substr_count($mediaViewMarkup, 'id="media-upload-alt-text"') === 1,
@@ -4987,8 +5012,9 @@ assertTrue(
 $mediaHeadingMatches = [];
 preg_match_all('/<h([1-6])\b/i', $mediaViewMarkup, $mediaHeadingMatches);
 assertTrue(
-    array_map('intval', $mediaHeadingMatches[1]) === [1, 2]
-        && str_contains($mediaViewMarkup, '<h2>⬆️ Tải tệp hình ảnh mới lên Thư viện</h2>'),
+    ($mediaHeadingMatches[1][0] ?? null) === '1'
+        && !in_array('3', $mediaHeadingMatches[1], true)
+        && str_contains($mediaViewMarkup, '<h2>Tải ảnh lên thư viện</h2>'),
     'Rendered admin media page uses a second-level heading for its upload section after the page title'
 );
 $mediaFiles = [new \App\Domain\Entity\MediaFile(
@@ -5007,7 +5033,7 @@ require dirname(__DIR__) . '/src/Presentation/Views/admin/media/index.php';
 $mediaViewWithImageMarkup = (string) ob_get_clean();
 $adminCss = (string) file_get_contents(dirname(__DIR__) . '/public/assets/css/admin.css');
 assertTrue(
-    preg_match('~<div class="wp-media-thumb">\s*<img src="/uploads/sample\.jpg" alt="Sample image" width="640" height="480">\s*</div>~', $mediaViewWithImageMarkup) === 1
+    preg_match('~<div class="wp-media-thumb">\s*<button[^>]*class="media-preview-open"[^>]*><img src="/uploads/sample\.jpg" alt="Sample image" loading="lazy" width="640" height="480">~', $mediaViewWithImageMarkup) === 1
         && preg_match('/\.wp-media-thumb img\s*\{[^}]*width:\s*100%;[^}]*height:\s*140px;[^}]*object-fit:\s*cover;/s', $adminCss) === 1,
     'Rendered admin media thumbnails keep a responsive, fixed-height image box reserved while the source image loads'
 );
@@ -5036,8 +5062,8 @@ ob_start();
 require dirname(__DIR__) . '/src/Presentation/Views/admin/media/index.php';
 $mediaViewWithoutCompleteDimensionsMarkup = (string) ob_get_clean();
 assertTrue(
-    preg_match('~<img src="/uploads/legacy\.jpg" alt="Legacy image">~', $mediaViewWithoutCompleteDimensionsMarkup) === 1
-        && preg_match('~<img src="/uploads/partial\.jpg" alt="Partial metadata image">~', $mediaViewWithoutCompleteDimensionsMarkup) === 1
+    preg_match('~<img src="/uploads/legacy\.jpg" alt="Legacy image" loading="lazy">~', $mediaViewWithoutCompleteDimensionsMarkup) === 1
+        && preg_match('~<img src="/uploads/partial\.jpg" alt="Partial metadata image" loading="lazy">~', $mediaViewWithoutCompleteDimensionsMarkup) === 1
         && !str_contains($mediaViewWithoutCompleteDimensionsMarkup, 'width="640"')
         && preg_match('/\.wp-media-thumb img\s*\{[^}]*width:\s*100%;[^}]*height:\s*140px;[^}]*object-fit:\s*cover;/s', $adminCss) === 1,
     'Media thumbnails omit guessed dimensions for legacy or incomplete metadata while CSS still reserves their thumbnail boxes'
@@ -5091,6 +5117,7 @@ assertTrue(
 $tasks = [];
 $taskProgress = [];
 $agents = [];
+$apiConfig = ['base_url' => '', 'api_key' => '', 'model' => '', 'configured' => false];
 $snapshots = [];
 $gateReport = ['gates' => []];
 $continuousState = [
@@ -5328,7 +5355,7 @@ assertTrue(
 $harnessViewSource = (string) file_get_contents(dirname(__DIR__) . '/src/Presentation/Views/admin/harness/index.php');
 preg_match_all('/<h([1-6])\b/i', $harnessViewSource, $harnessHeadingMatches);
 assertTrue(
-    array_map('intval', $harnessHeadingMatches[1]) === [1, 2, 2, 2, 2, 2],
+    array_map('intval', $harnessHeadingMatches[1]) === [1, 2, 2, 2, 2, 2, 2],
     'Harness page section headings follow the page title without skipping a heading rank'
 );
 

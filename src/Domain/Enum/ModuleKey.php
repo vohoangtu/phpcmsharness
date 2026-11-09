@@ -13,6 +13,7 @@ enum ModuleKey: string
     case MEDIA = 'media';
     case CATEGORIES_TAGS = 'categories_tags';
     case HARNESS = 'harness';
+    case WORKERS = 'workers';
 
     public function label(): string
     {
@@ -24,6 +25,7 @@ enum ModuleKey: string
             self::MEDIA => 'Thư viện Media (Quản lý ảnh)',
             self::CATEGORIES_TAGS => 'Danh mục & Thẻ (Taxonomies)',
             self::HARNESS => 'Tuzygent AI Harness (Tự phát triển Code)',
+            self::WORKERS => 'Workers (Hàng đợi tác vụ nền)',
         };
     }
 
@@ -37,6 +39,7 @@ enum ModuleKey: string
             self::MEDIA => 'Quản lý tập trung hình ảnh tải lên, chọn ảnh nhanh khi viết bài hoặc đăng sản phẩm.',
             self::CATEGORIES_TAGS => 'Phân loại bài viết & sản phẩm theo Danh mục đa cấp và gắn thẻ Tags chuẩn SEO.',
             self::HARNESS => 'Hệ thống Autonomous Self-Evolving Code Harness kiểu Tuzygent: Quản lý Backlog, tự sinh/sửa code theo chuẩn Hexagonal, chạy Verification Gate, Self-Healing và Snapshot Rollback.',
+            self::WORKERS => 'Hàng đợi SQLite bền vững và worker tuần tự để xử lý tác vụ nền từ Harness và các module khác.',
         };
     }
 
@@ -50,6 +53,7 @@ enum ModuleKey: string
             self::MEDIA => '🖼️',
             self::CATEGORIES_TAGS => '🏷️',
             self::HARNESS => '🤖',
+            self::WORKERS => '⚙️',
         };
     }
 

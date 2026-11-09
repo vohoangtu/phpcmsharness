@@ -17,7 +17,7 @@ final readonly class SqliteMediaRepository implements MediaRepositoryPort
 
     public function findAll(?int $limit = null, int $offset = 0): array
     {
-        $sql = 'SELECT * FROM media ORDER BY id DESC';
+        $sql = 'SELECT media.*, media_folders.name AS folder_name FROM media LEFT JOIN media_folders ON media.folder_id = media_folders.id ORDER BY media.id DESC';
         if ($limit !== null && $limit > 0) {
             $sql .= ' LIMIT ? OFFSET ?';
             $stmt = $this->pdo->prepare($sql);
@@ -55,8 +55,8 @@ final readonly class SqliteMediaRepository implements MediaRepositoryPort
     public function save(MediaFile $media): int
     {
         $stmt = $this->pdo->prepare('
-            INSERT INTO media (filename, original_name, file_path, mime_type, file_size, alt_text, created_at, width, height)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO media (filename, original_name, file_path, mime_type, file_size, alt_text, created_at, width, height, folder_id, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ');
         $stmt->execute([
             $media->filename,
@@ -68,6 +68,8 @@ final readonly class SqliteMediaRepository implements MediaRepositoryPort
             date('Y-m-d H:i:s'),
             $media->width,
             $media->height,
+            $media->folderId,
+            $media->tags,
         ]);
         return (int) $this->pdo->lastInsertId();
     }
@@ -76,6 +78,46 @@ final readonly class SqliteMediaRepository implements MediaRepositoryPort
     {
         $stmt = $this->pdo->prepare('DELETE FROM media WHERE id = ?');
         $stmt->execute([$id]);
+    }
+
+    public function findFolders(): array
+    {
+        $rows = $this->pdo->query('SELECT id, name, parent_id FROM media_folders ORDER BY name COLLATE NOCASE')->fetchAll();
+        return array_map(static fn(array $row): array => ['id' => (int)$row['id'], 'name' => (string)$row['name'], 'parent_id' => $row['parent_id'] === null ? null : (int)$row['parent_id']], $rows);
+    }
+
+    public function createFolder(string $name, ?int $parentId = null): int
+    {
+        $statement = $this->pdo->prepare('INSERT INTO media_folders (name, parent_id) VALUES (?, ?)');
+        $statement->execute([$name, $parentId]);
+        return (int)$this->pdo->lastInsertId();
+    }
+
+    public function moveToFolder(array $mediaIds, ?int $folderId): void
+    {
+        $statement = $this->pdo->prepare('UPDATE media SET folder_id = ? WHERE id = ?');
+        foreach ($mediaIds as $id) $statement->execute([$folderId, $id]);
+    }
+
+    public function updateMetadata(int $id, string $altText, string $tags): void
+    {
+        $statement = $this->pdo->prepare('UPDATE media SET alt_text = ?, tags = ? WHERE id = ?');
+        $statement->execute([$altText, $tags, $id]);
+    }
+
+    public function markUsed(array $mediaIds): void
+    {
+        $statement = $this->pdo->prepare('UPDATE media SET last_used_at = ?, use_count = use_count + 1 WHERE id = ?');
+        $now = date('Y-m-d H:i:s');
+        foreach (array_unique($mediaIds) as $id) $statement->execute([$now, (int)$id]);
+    }
+
+    public function findRecentlyUsed(int $limit = 6): array
+    {
+        $statement = $this->pdo->prepare('SELECT media.*, media_folders.name AS folder_name FROM media LEFT JOIN media_folders ON media.folder_id = media_folders.id WHERE media.last_used_at IS NOT NULL ORDER BY media.last_used_at DESC LIMIT ?');
+        $statement->bindValue(1, max(1, $limit), PDO::PARAM_INT);
+        $statement->execute();
+        return array_map(fn(array $row) => $this->hydrate($row), $statement->fetchAll());
     }
 
     /**
@@ -93,7 +135,12 @@ final readonly class SqliteMediaRepository implements MediaRepositoryPort
             altText: (string) $r['alt_text'],
             createdAt: (string) $r['created_at'],
             width: isset($r['width']) ? (int) $r['width'] : null,
-            height: isset($r['height']) ? (int) $r['height'] : null
+            height: isset($r['height']) ? (int) $r['height'] : null,
+            folderId: isset($r['folder_id']) ? (int)$r['folder_id'] : null,
+            folderName: (string)($r['folder_name'] ?? ''),
+            tags: (string)($r['tags'] ?? ''),
+            lastUsedAt: isset($r['last_used_at']) ? (string)$r['last_used_at'] : null,
+            useCount: (int)($r['use_count'] ?? 0)
         );
     }
 }

@@ -25,10 +25,10 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
     </div>
 </div>
 
-<form method="get" action="/admin/orders" class="wp-card" style="display:flex; align-items:end; gap:10px; margin:16px 0;">
+<form method="get" action="/admin/orders" class="wp-card orders-search-form">
     <?php if ($currentStatus !== ''): ?><input type="hidden" name="status" value="<?= htmlspecialchars($currentStatus, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
     <label for="order-search">Tìm theo mã đơn, tên, email hoặc số điện thoại</label>
-    <input id="order-search" type="search" name="q" value="<?= htmlspecialchars($searchQuery, ENT_QUOTES, 'UTF-8') ?>" maxlength="100" placeholder="Nhập từ khóa">
+    <input id="order-search" type="search" name="q" value="<?= htmlspecialchars($searchQuery, ENT_QUOTES, 'UTF-8') ?>" maxlength="100" placeholder="Nhập từ khóa" class="wp-input">
     <button type="submit" class="wp-btn wp-btn-primary">Tìm đơn hàng</button>
     <?php if ($searchQuery !== ''): ?><a class="wp-btn wp-btn-secondary" href="/admin/orders<?= $currentStatus !== '' ? '?status=' . rawurlencode($currentStatus) : '' ?>">Xóa tìm kiếm</a><?php endif; ?>
 </form>
@@ -47,7 +47,7 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
             <p>Chưa có đơn đặt hàng nào trong trạng thái này.</p>
         </div>
     <?php else: ?>
-        <table class="wp-table">
+        <table class="wp-table orders-list-table">
             <thead>
                 <tr>
                     <th>Mã đơn</th>
@@ -63,17 +63,17 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
             <tbody>
                 <?php foreach ($orders as $order): ?>
                     <tr>
-                        <td><a href="/admin/orders/<?= $order->id ?>"><strong>#<?= htmlspecialchars($order->orderCode) ?></strong></a></td>
-                        <td>
+                        <td data-label="Mã đơn"><a href="/admin/orders/<?= $order->id ?>"><strong>#<?= htmlspecialchars($order->orderCode) ?></strong></a></td>
+                        <td data-label="Khách hàng">
                             <strong><?= htmlspecialchars($order->customerName) ?></strong><br>
                             <small class="wp-text-muted"><?= htmlspecialchars($order->customerEmail) ?></small>
                         </td>
-                        <td><?= htmlspecialchars($order->customerPhone) ?></td>
-                        <td><?= count($order->items) ?> sản phẩm</td>
-                        <td><strong><?= $order->formattedTotal() ?></strong></td>
-                        <td><span class="wp-status-badge <?= $order->status->badgeClass() ?>"><?= $order->status->label() ?></span></td>
-                        <td><small><?= htmlspecialchars($order->createdAt) ?></small></td>
-                        <td style="text-align:right;">
+                        <td data-label="Số điện thoại"><?= htmlspecialchars($order->customerPhone) ?></td>
+                        <td data-label="Mặt hàng"><?= count($order->items) ?> sản phẩm</td>
+                        <td data-label="Tổng thanh toán"><strong><?= $order->formattedTotal() ?></strong></td>
+                        <td data-label="Trạng thái"><span class="wp-status-badge <?= $order->status->badgeClass() ?>"><?= $order->status->label() ?></span></td>
+                        <td data-label="Ngày đặt"><small><?= htmlspecialchars($order->createdAt) ?></small></td>
+                        <td data-label="Chi tiết" style="text-align:right;">
                             <a href="/admin/orders/<?= $order->id ?>" class="wp-btn wp-btn-secondary wp-btn-sm">Xem &amp; Xử lý →</a>
                         </td>
                     </tr>

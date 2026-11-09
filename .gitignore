@@ -1,0 +1,47 @@
+.harness/api_config.json
+.harness/continuous_worker.token
+.harness/task_worker_tokens/
+.harness/task_worker.lock
+.harness/task_execution.lock
+.harness/task_worker.log
+.harness/continuous_daemon.log
+.harness/continuous_state.json
+.harness/continuous_state.json.lock
+.harness/CURRENT_TASK_PROMPT.md
+.harness/CURRENT_TASK.patch
+.harness/staging/
+.harness/updates/
+.harness/update-install.lock
+
+# Composer dependencies (restore with: composer install)
+/vendor/
+/node_modules/
+
+# Local configuration and secrets
+/.env
+/.env.*
+!/.env.example
+
+# Runtime data, generated snapshots, caches, and worker state
+/storage/cache/
+/storage/snapshots/
+/storage/workers/
+/storage/sessions/
+/storage/logs/
+/storage/database.sqlite
+/storage/database.sqlite-*
+/public/uploads/
+
+# Test and tool output
+/.phpunit.cache/
+/coverage/
+/build/
+/dist/
+*.log
+*.tmp
+*.swp
+
+# Local editor and operating-system files
+.DS_Store
+Thumbs.db
+/.idea/

@@ -47,57 +47,63 @@ final readonly class TuzygentHarnessService
     }
 
     /**
-     * Phát hiện các AI Agent CLI có sẵn trên máy cùng bộ Built-in Hexagonal Generator.
+     * Liệt kê backend API cùng bộ Built-in Hexagonal Generator.
      *
      * @return array<string, array{name: string, binary: string, available: bool, description: string}>
      */
     public function discoverAgents(): array
     {
-        $candidates = [
+        return [
+            'openai-compatible' => [
+                'name' => 'OpenAI-compatible API', 'binary' => '',
+                'available' => $this->getApiConfig()['configured'],
+                'description' => 'Sinh đề xuất trong staging; chỉ cài lên website qua gói cập nhật đã kiểm định.',
+            ],
             'builtin-hexagonal' => [
-                'name' => 'Tuzygent Hexagonal Engine (Built-in)',
-                'binary' => 'php',
-                'description' => 'Bộ sinh mã nguồn chuẩn Hexagonal Architecture (Entity + Port + SQLite Adapter + Service + Test) tích hợp sẵn.',
-            ],
-            'claude' => [
-                'name' => 'Claude Code CLI',
-                'binary' => 'claude',
-                'description' => 'Anthropic Claude Agent CLI tự động phân tích và sửa source code.',
-            ],
-            'codex' => [
-                'name' => 'OpenAI Codex CLI',
-                'binary' => 'codex',
-                'description' => 'OpenAI Codex CLI hỗ trợ sinh patch và tự động viết test.',
-            ],
-            'gemini' => [
-                'name' => 'Google Gemini CLI',
-                'binary' => 'gemini',
-                'description' => 'Google Gemini CLI chạy vòng lặp phát triển tính năng.',
-            ],
-            'opencode' => [
-                'name' => 'OpenCode Agent CLI',
-                'binary' => 'opencode',
-                'description' => 'OpenCode CLI hỗ trợ lập trình tự hành trên terminal.',
-            ],
-            'cursor-agent' => [
-                'name' => 'Cursor Agent CLI',
-                'binary' => 'cursor-agent',
-                'description' => 'Cursor Agent CLI thực thi tác vụ đa tệp.',
+                'name' => 'Tuzygent Hexagonal Engine (Built-in)', 'binary' => 'php',
+                'available' => true, 'description' => 'Sinh phân hệ Hexagonal tích hợp sẵn.',
             ],
         ];
+    }
 
-        $result = [];
-        foreach ($candidates as $key => $info) {
-            $available = $key === 'builtin-hexagonal' || $this->isBinaryAvailable($info['binary']);
-            $result[$key] = [
-                'name' => $info['name'],
-                'binary' => $info['binary'],
-                'available' => $available,
-                'description' => $info['description'],
-            ];
+    /** @return array{base_url:string,api_key:string,model:string,configured:bool} */
+    public function getApiConfig(): array
+    {
+        $path = $this->harnessDir . '/api_config.json';
+        $stored = is_file($path) ? json_decode((string) file_get_contents($path), true) : [];
+        $stored = is_array($stored) ? $stored : [];
+        $key = (string) ($stored['api_key'] ?? '');
+        return [
+            'base_url' => (string) ($stored['base_url'] ?? 'https://api.openai.com/v1'),
+            'api_key' => '',
+            'model' => (string) ($stored['model'] ?? ''),
+            'configured' => $key !== '' && (string) ($stored['model'] ?? '') !== '',
+        ];
+    }
+
+    /** Save API credentials locally; blank API key preserves the existing key. */
+    public function saveApiConfig(array $data): void
+    {
+        $path = $this->harnessDir . '/api_config.json';
+        $existing = is_file($path) ? json_decode((string) file_get_contents($path), true) : [];
+        $existing = is_array($existing) ? $existing : [];
+        $baseUrl = rtrim(trim((string) ($data['base_url'] ?? '')), '/');
+        $model = trim((string) ($data['model'] ?? ''));
+        $apiKey = trim((string) ($data['api_key'] ?? '')) ?: (string) ($existing['api_key'] ?? '');
+        if (!filter_var($baseUrl, FILTER_VALIDATE_URL) || !in_array(parse_url($baseUrl, PHP_URL_SCHEME), ['http', 'https'], true)) {
+            throw new RuntimeException('Base URL phải là URL HTTP hoặc HTTPS hợp lệ.');
         }
-
-        return $result;
+        if ($model === '' || $apiKey === '') {
+            throw new RuntimeException('Cần nhập Model và API key (hoặc giữ API key đã lưu).');
+        }
+        if (str_contains($apiKey, "\r") || str_contains($apiKey, "\n")) {
+            throw new RuntimeException('API key không được chứa ký tự xuống dòng.');
+        }
+        $written = file_put_contents($path, json_encode(['base_url' => $baseUrl, 'model' => $model, 'api_key' => $apiKey], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), LOCK_EX);
+        if ($written === false) {
+            throw new RuntimeException('Không thể ghi cấu hình API vào .harness.');
+        }
+        @chmod($path, 0600);
     }
 
     /**
@@ -114,9 +120,9 @@ final readonly class TuzygentHarnessService
             ? (string) $data['action_type']
             : 'scaffold_module';
 
-        $agentBackend = trim((string) ($data['agent_backend'] ?? 'builtin-hexagonal'));
-        if (!in_array($agentBackend, ['builtin-hexagonal', 'claude', 'codex', 'gemini', 'opencode', 'cursor-agent'], true)) {
-            $agentBackend = 'builtin-hexagonal';
+        $agentBackend = trim((string) ($data['agent_backend'] ?? 'openai-compatible'));
+        if (!in_array($agentBackend, ['builtin-hexagonal', 'openai-compatible'], true)) {
+            $agentBackend = 'openai-compatible';
         }
 
         $targetName = preg_replace('/[^a-zA-Z0-9]/', '', (string) ($data['target_name'] ?? ''));
@@ -172,6 +178,7 @@ final readonly class TuzygentHarnessService
 
     public function deleteTask(int $id): void
     {
+        $this->removeGeneratedDirectory($this->updatePackageDirectory($id), $this->harnessDir . '/updates/');
         $this->harnessRepository->delete($id);
     }
 
@@ -268,10 +275,25 @@ final readonly class TuzygentHarnessService
     }
 
     /**
-     * Thực thi Vòng lặp Tự phát triển (Autonomous Self-Evolving Loop):
-     * Snapshot -> Propose/Generate Code -> Verification Gate -> Self-Heal Retry -> Commit or Rollback.
+     * Generate an update in an isolated workspace, verify it, and queue it
+     * for installation through the website updater.
      */
     public function executeTask(int $taskId): HarnessTask
+    {
+        $lock = fopen($this->harnessDir . '/update-install.lock', 'c');
+        if ($lock === false || !flock($lock, LOCK_SH | LOCK_NB)) {
+            if (is_resource($lock)) fclose($lock);
+            throw new RuntimeException('Một bản cập nhật website đang được cài đặt; task sẽ được Workers thử lại sau.');
+        }
+        try {
+            return $this->executeTaskInStaging($taskId);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    private function executeTaskInStaging(int $taskId): HarnessTask
     {
         $task = $this->harnessRepository->findById($taskId);
         if ($task === null) {
@@ -279,96 +301,452 @@ final readonly class TuzygentHarnessService
         }
 
         $logs = [];
-        $logs[] = sprintf('[%s] 🚀 Bắt đầu vòng lặp Tuzygent Autonomous Loop cho Task %s: %s', date('H:i:s'), $task->taskCode, $task->title);
-
-        // 1. Tạo Snapshot trước khi sửa source code
-        $snapshotId = $this->createSnapshot($task->taskCode);
-        $logs[] = sprintf('[%s] 📸 Đã tạo Snapshot an toàn: %s', date('H:i:s'), $snapshotId);
-        $this->persistTaskProgress($task, 0, $snapshotId, [], '', $logs);
+        $logs[] = sprintf('[%s] 🚀 Tạo gói cập nhật cô lập cho Task %s: %s', date('H:i:s'), $task->taskCode, $task->title);
+        $this->persistTaskProgress($task, 0, '', [], '', $logs);
 
         $attempt = 0;
         $maxAttempts = max(1, $task->maxAttempts);
         $lastGateResult = null;
         $filesChanged = [];
         $previousFailureFeedback = '';
+        $lastFailure = '';
+        $terminalApiFailure = false;
 
         while ($attempt < $maxAttempts) {
             $attempt++;
-            $logs[] = sprintf('[%s] 🔄 Lần thử #%d/%d với Agent Backend [%s]...', date('H:i:s'), $attempt, $maxAttempts, $task->agentBackend);
-            $this->persistTaskProgress($task, $attempt, $snapshotId, $filesChanged, '', $logs);
+            $filesChanged = [];
+            $logs[] = sprintf('[%s] 🔄 Lần thử #%d/%d trong staging [%s]...', date('H:i:s'), $attempt, $maxAttempts, $task->agentBackend);
+            $this->persistTaskProgress($task, $attempt, '', $filesChanged, '', $logs);
 
-            $onProgress = function (array $currentFiles, string $summary) use ($task, $snapshotId, &$attempt, &$filesChanged, &$logs): void {
+            $stagePath = '';
+            try {
+                $stagePath = $this->createStagingWorkspace((int) $task->id);
+                $stagedHarness = new self($this->harnessRepository, $stagePath);
+                $stageBefore = $stagedHarness->captureManagedFileHashes();
+            } catch (\Throwable $e) {
+                if ($stagePath !== '') $this->removeStagingWorkspace($stagePath);
+                $lastFailure = 'Không thể tạo staging: ' . $e->getMessage();
+                $logs[] = sprintf('[%s] ❌ %s', date('H:i:s'), $lastFailure);
+                break;
+            }
+
+            $onProgress = function (array $currentFiles, string $summary) use ($task, &$attempt, &$filesChanged, &$logs): void {
                 $filesChanged = array_values(array_unique(array_merge($filesChanged, $currentFiles)));
                 $logs[] = sprintf('[%s] 🔧 %s', date('H:i:s'), $summary);
-                $this->persistTaskProgress($task, $attempt, $snapshotId, $filesChanged, '', $logs);
+                $this->persistTaskProgress($task, $attempt, '', $filesChanged, '', $logs);
             };
 
             $proposalSucceeded = false;
             try {
-                $changedInStep = $this->runAgentProposalStep($task, $previousFailureFeedback, $logs, $onProgress);
-                $filesChanged = array_values(array_unique(array_merge($filesChanged, $changedInStep)));
+                if ($task->agentBackend === 'openai-compatible') $this->copyApiConfigToStage($stagePath);
+                $stagedHarness->runAgentProposalStep($task, $previousFailureFeedback, $logs, $onProgress);
+                $filesChanged = $stagedHarness->findChangedManagedFiles($stageBefore);
                 $proposalSucceeded = true;
             } catch (\Throwable $e) {
                 $logs[] = sprintf('[%s] ⚠️ Lỗi trong bước sinh code: %s', date('H:i:s'), $e->getMessage());
-                $previousFailureFeedback = 'Proposal step failed: ' . $e->getMessage();
+                $lastFailure = 'Tạo đề xuất cập nhật thất bại: ' . $e->getMessage();
+                $previousFailureFeedback = $lastFailure;
+                $terminalApiFailure = preg_match('/HTTP 5\d\d|timeout|timed out/i', $e->getMessage()) === 1;
             }
 
-            // Chạy Verification Gate
-            $logs[] = sprintf('[%s] 🧪 Đang chạy 3-Stage Verification Gate...', date('H:i:s'));
-            $this->persistTaskProgress($task, $attempt, $snapshotId, $filesChanged, '', $logs);
-            $lastGateResult = $this->runVerificationGate();
+            if ($proposalSucceeded && $task->actionType !== 'self_audit' && $filesChanged === []) {
+                $proposalSucceeded = false;
+                $lastFailure = 'Agent không tạo thay đổi nào để đóng gói.';
+                $previousFailureFeedback = $lastFailure;
+                $logs[] = sprintf('[%s] ⚠️ %s', date('H:i:s'), $lastFailure);
+            }
+
+            if (!$proposalSucceeded) {
+                $this->persistTaskProgress($task, $attempt, '', $filesChanged, $lastFailure, $logs);
+                $this->removeStagingWorkspace($stagePath);
+                if ($terminalApiFailure) {
+                    $logs[] = sprintf('[%s] ⏹️ Dừng retry vì API timeout/lỗi upstream; website không bị thay đổi.', date('H:i:s'));
+                    break;
+                }
+                continue;
+            }
+
+            $logs[] = sprintf('[%s] 🧪 Chạy 3-Stage Gate trên staging; website đang chạy chưa bị thay đổi.', date('H:i:s'));
+            try {
+                $lastGateResult = $stagedHarness->runVerificationGate();
+            } catch (\Throwable $e) {
+                $lastFailure = 'Không thể chạy Gate trên staging: ' . $e->getMessage();
+                $logs[] = sprintf('[%s] ❌ %s', date('H:i:s'), $lastFailure);
+                $this->removeStagingWorkspace($stagePath);
+                continue;
+            }
             $logs[] = sprintf('[%s] %s Verification Gate: %s', date('H:i:s'), $lastGateResult['passed'] ? '✅' : '❌', $lastGateResult['passed'] ? '3/3 cổng đạt.' : 'Có cổng chưa đạt.');
-            $this->persistTaskProgress($task, $attempt, $snapshotId, $filesChanged, $lastGateResult['summary'], $logs);
+            $this->persistTaskProgress($task, $attempt, '', $filesChanged, $lastGateResult['summary'], $logs);
 
-            if ($proposalSucceeded && $lastGateResult['passed']) {
-                $logs[] = sprintf('[%s] ✅ TẤT CẢ 3 VERIFICATION GATES ĐỀU VƯỢT QUA! Chấp nhận thay đổi (Admission Passed).', date('H:i:s'));
-                $completedTask = new HarnessTask(
-                    id: $task->id,
-                    taskCode: $task->taskCode,
-                    title: $task->title,
-                    specification: $task->specification,
-                    actionType: $task->actionType,
-                    targetName: $task->targetName,
-                    agentBackend: $task->agentBackend,
-                    status: HarnessTaskStatus::COMPLETED,
-                    attempts: $attempt,
-                    maxAttempts: $maxAttempts,
-                    snapshotId: $snapshotId,
-                    filesChanged: $filesChanged,
-                    verificationOutput: $lastGateResult['summary'],
-                    executionLog: implode("\n", $logs)
+            if ($lastGateResult['passed']) {
+                if ($task->actionType === 'self_audit') {
+                    $completedTask = new HarnessTask(
+                        id: $task->id, taskCode: $task->taskCode, title: $task->title,
+                        specification: $task->specification, actionType: $task->actionType,
+                        targetName: $task->targetName, agentBackend: $task->agentBackend,
+                        status: HarnessTaskStatus::COMPLETED, attempts: $attempt,
+                        maxAttempts: $maxAttempts, snapshotId: '', filesChanged: [],
+                        verificationOutput: $lastGateResult['summary'], executionLog: implode("\n", $logs)
+                    );
+                    $this->harnessRepository->save($completedTask);
+                    $this->removeStagingWorkspace($stagePath);
+                    return $this->harnessRepository->findById((int) $task->id) ?? $completedTask;
+                }
+
+                try {
+                    $filesChanged = $this->createUpdatePackage((int) $task->id, $task->taskCode, $stagePath, $filesChanged, $stageBefore);
+                    $this->copyResearchNoteFromStage((int) $task->id, $task->taskCode, $stagePath);
+                } catch (\Throwable $e) {
+                    $lastFailure = 'Không thể đóng gói bản cập nhật: ' . $e->getMessage();
+                    $previousFailureFeedback = $lastFailure;
+                    $logs[] = sprintf('[%s] ❌ %s', date('H:i:s'), $lastFailure);
+                    $this->removeStagingWorkspace($stagePath);
+                    continue;
+                }
+                $logs[] = sprintf('[%s] 📦 Gói cập nhật đã sẵn sàng. Cài đặt từ Dashboard để đưa lên website.', date('H:i:s'));
+                $readyTask = new HarnessTask(
+                    id: $task->id, taskCode: $task->taskCode, title: $task->title,
+                    specification: $task->specification, actionType: $task->actionType,
+                    targetName: $task->targetName, agentBackend: $task->agentBackend,
+                    status: HarnessTaskStatus::READY_TO_INSTALL, attempts: $attempt,
+                    maxAttempts: $maxAttempts, snapshotId: '', filesChanged: $filesChanged,
+                    verificationOutput: $lastGateResult['summary'], executionLog: implode("\n", $logs)
                 );
-                $this->harnessRepository->save($completedTask);
-                return $this->harnessRepository->findById((int) $task->id) ?? $completedTask;
+                $this->harnessRepository->save($readyTask);
+                $this->removeStagingWorkspace($stagePath);
+                return $this->harnessRepository->findById((int) $task->id) ?? $readyTask;
             }
 
+            $lastFailure = "Verification Gate thất bại trên staging:\n" . $lastGateResult['summary'];
             $previousFailureFeedback = $lastGateResult['summary'];
-            $logs[] = sprintf('[%s] ❌ Verification Gate thất bại ở lần thử #%d. Kích hoạt cơ chế Self-Healing...', date('H:i:s'), $attempt);
+            $logs[] = sprintf('[%s] ❌ Staging Gate thất bại ở lần thử #%d. Website vẫn giữ nguyên; sẽ thử đề xuất mới.', date('H:i:s'), $attempt);
+            $this->removeStagingWorkspace($stagePath);
         }
 
-        // Nếu vượt quá số lần thử tối đa mà vẫn lỗi -> Tự động Rollback về Snapshot!
-        $logs[] = sprintf('[%s] ⏪ Vượt quá %d lần thử. Tự động Rollback mã nguồn về Snapshot [%s] để bảo vệ hệ thống!', date('H:i:s'), $maxAttempts, $snapshotId);
-        $this->rollbackToSnapshot($snapshotId);
+        $logs[] = sprintf('[%s] ⛔ Không tạo được gói cập nhật sau %d lần thử. Mã nguồn website không bị chỉnh sửa.', date('H:i:s'), $attempt);
 
-        $rolledBackTask = new HarnessTask(
-            id: $task->id,
-            taskCode: $task->taskCode,
-            title: $task->title,
-            specification: $task->specification,
-            actionType: $task->actionType,
-            targetName: $task->targetName,
-            agentBackend: $task->agentBackend,
-            status: HarnessTaskStatus::ROLLED_BACK,
-            attempts: $attempt,
-            maxAttempts: $maxAttempts,
-            snapshotId: $snapshotId,
-            filesChanged: $filesChanged,
-            verificationOutput: $lastGateResult['summary'] ?? 'Failed verification gate.',
+        $failedTask = new HarnessTask(
+            id: $task->id, taskCode: $task->taskCode, title: $task->title,
+            specification: $task->specification, actionType: $task->actionType,
+            targetName: $task->targetName, agentBackend: $task->agentBackend,
+            status: HarnessTaskStatus::FAILED, attempts: $attempt,
+            maxAttempts: $maxAttempts, snapshotId: '', filesChanged: $filesChanged,
+            verificationOutput: $lastFailure !== '' ? $lastFailure : ($lastGateResult['summary'] ?? 'Không tạo được gói cập nhật.'),
             executionLog: implode("\n", $logs)
         );
-        $this->harnessRepository->save($rolledBackTask);
+        $this->harnessRepository->save($failedTask);
 
-        return $this->harnessRepository->findById((int) $task->id) ?? $rolledBackTask;
+        return $this->harnessRepository->findById((int) $task->id) ?? $failedTask;
+    }
+
+    /** Install a verified task package from the admin dashboard. */
+    public function installUpdate(int $taskId): HarnessTask
+    {
+        $task = $this->harnessRepository->findById($taskId);
+        if ($task === null || $task->status !== HarnessTaskStatus::READY_TO_INSTALL) {
+            throw new RuntimeException('Task chưa có gói cập nhật đã vượt qua kiểm định để cài đặt.');
+        }
+
+        $packageDir = $this->updatePackageDirectory($taskId);
+        $manifestPath = $packageDir . '/manifest.json';
+        $manifest = is_file($manifestPath) ? json_decode((string) file_get_contents($manifestPath), true) : null;
+        if (!is_array($manifest) || (int) ($manifest['schema_version'] ?? 0) !== 1
+            || !is_array($manifest['files'] ?? null) || !is_array($manifest['deleted'] ?? null)
+            || !is_array($manifest['base_files'] ?? null)
+            || ((array) ($manifest['files'] ?? []) === [] && (array) ($manifest['deleted'] ?? []) === [])
+            || (int) ($manifest['task_id'] ?? 0) !== $taskId
+            || (string) ($manifest['task_code'] ?? '') !== $task->taskCode) {
+            throw new RuntimeException('Không tìm thấy manifest hợp lệ cho gói cập nhật này.');
+        }
+        $lockPath = $this->harnessDir . '/update-install.lock';
+        $lock = fopen($lockPath, 'c');
+        if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+            if (is_resource($lock)) fclose($lock);
+            throw new RuntimeException('Một bản cập nhật khác đang được cài đặt.');
+        }
+
+        $snapshotId = '';
+        $maintenanceStarted = false;
+        $logs = preg_split('/\R/', $task->executionLog) ?: [];
+        try {
+            foreach (array_unique(array_merge(array_keys($manifest['files']), array_values($manifest['deleted']))) as $relativePath) {
+                $relativePath = (string) $relativePath;
+                $this->assertInstallablePath($relativePath);
+                if (!array_key_exists($relativePath, $manifest['base_files'])) {
+                    throw new RuntimeException("Manifest thiếu checksum source ban đầu: {$relativePath}");
+                }
+                $livePath = $this->basePath . '/' . $relativePath;
+                $liveHash = is_file($livePath) ? (hash_file('sha256', $livePath) ?: '') : null;
+                $expectedBaseHash = $manifest['base_files'][$relativePath];
+                if ($liveHash !== $expectedBaseHash) {
+                    throw new RuntimeException("Gói đã cũ vì website đã thay đổi {$relativePath}. Tạo lại gói trên source hiện tại trước khi cài.");
+                }
+            }
+
+            $snapshotId = $this->createSnapshot('update_' . $task->taskCode);
+            $maintenancePath = $this->basePath . '/storage/update-maintenance.json';
+            $maintenanceTemp = $maintenancePath . '.tmp-' . bin2hex(random_bytes(5));
+            $maintenanceState = json_encode(['task_id' => $taskId, 'snapshot_id' => $snapshotId, 'started_at' => time()], JSON_THROW_ON_ERROR);
+            if (file_put_contents($maintenanceTemp, $maintenanceState, LOCK_EX) === false || !rename($maintenanceTemp, $maintenancePath)) {
+                @unlink($maintenanceTemp);
+                throw new RuntimeException('Không thể bật chế độ bảo trì trước khi cài đặt.');
+            }
+            $maintenanceStarted = true;
+            $this->backupDatabaseForSnapshot($snapshotId);
+            $logs[] = sprintf('[%s] 📦 Bắt đầu cài gói cập nhật từ Dashboard.', date('H:i:s'));
+            $logs[] = sprintf('[%s] 📸 Sao lưu trước cập nhật: %s', date('H:i:s'), $snapshotId);
+
+            foreach ((array) ($manifest['files'] ?? []) as $relativePath => $expectedHash) {
+                $relativePath = (string) $relativePath;
+                $this->assertInstallablePath($relativePath);
+                $this->assertNoSymlinkComponents($relativePath);
+                $source = $packageDir . '/files/' . $relativePath;
+                if (!is_file($source) || !hash_equals((string) $expectedHash, hash_file('sha256', $source) ?: '')) {
+                    throw new RuntimeException("Tệp gói cập nhật không hợp lệ: {$relativePath}");
+                }
+                $destination = $this->basePath . '/' . $relativePath;
+                if (!is_dir(dirname($destination)) && !mkdir(dirname($destination), 0775, true) && !is_dir(dirname($destination))) {
+                    throw new RuntimeException("Không thể tạo thư mục cập nhật cho {$relativePath}.");
+                }
+                $temporary = $destination . '.update-' . bin2hex(random_bytes(5));
+                if (!copy($source, $temporary) || !rename($temporary, $destination)) {
+                    @unlink($temporary);
+                    throw new RuntimeException("Không thể kích hoạt tệp cập nhật {$relativePath}.");
+                }
+            }
+
+            foreach ((array) ($manifest['deleted'] ?? []) as $relativePath) {
+                $relativePath = (string) $relativePath;
+                $this->assertInstallablePath($relativePath);
+                $this->assertNoSymlinkComponents($relativePath);
+                $destination = $this->basePath . '/' . $relativePath;
+                if (is_file($destination) && !unlink($destination)) {
+                    throw new RuntimeException("Không thể gỡ tệp cũ {$relativePath}.");
+                }
+            }
+
+            $report = $this->verifyInstalledPackage($manifest);
+            if (!$report['passed']) {
+                $restored = $this->rollbackToSnapshot($snapshotId);
+                $logs[] = sprintf('[%s] ❌ Health check sau cài đặt thất bại; %s.', date('H:i:s'), $restored ? 'đã khôi phục source và database' : 'khôi phục snapshot chưa hoàn tất');
+                $status = $restored ? HarnessTaskStatus::ROLLED_BACK : HarnessTaskStatus::FAILED;
+                $verificationOutput = "Post-install health check:\n" . $report['summary'] . "\n\nStaging Gate:\n" . $task->verificationOutput;
+            } else {
+                $logs[] = sprintf('[%s] ✅ Cài đặt website và integrity health check thành công.', date('H:i:s'));
+                $status = HarnessTaskStatus::COMPLETED;
+                $verificationOutput = "Post-install health check:\n" . $report['summary'] . "\n\nStaging Gate:\n" . $task->verificationOutput;
+            }
+        } catch (\Throwable $e) {
+            $restored = $snapshotId !== '' && $this->rollbackToSnapshot($snapshotId);
+            $logs[] = sprintf('[%s] ❌ Cài đặt thất bại: %s', date('H:i:s'), $e->getMessage());
+            if ($restored) $logs[] = sprintf('[%s] ⏪ Đã khôi phục snapshot [%s].', date('H:i:s'), $snapshotId);
+            elseif ($snapshotId !== '') $logs[] = sprintf('[%s] ⚠️ Không xác nhận được khôi phục hoàn chỉnh; cần kiểm tra website.', date('H:i:s'));
+            else $logs[] = sprintf('[%s] ℹ️ Chưa thay đổi website vì lỗi phát sinh trước khi cài.', date('H:i:s'));
+            $status = $restored ? HarnessTaskStatus::ROLLED_BACK : HarnessTaskStatus::FAILED;
+            $verificationOutput = $e->getMessage();
+        } finally {
+            if ($maintenanceStarted) @unlink($this->basePath . '/storage/update-maintenance.json');
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+
+        $updatedTask = new HarnessTask(
+            id: $task->id, taskCode: $task->taskCode, title: $task->title,
+            specification: $task->specification, actionType: $task->actionType,
+            targetName: $task->targetName, agentBackend: $task->agentBackend,
+            status: $status, attempts: $task->attempts, maxAttempts: $task->maxAttempts,
+            snapshotId: $snapshotId, filesChanged: $task->filesChanged,
+            verificationOutput: $verificationOutput, executionLog: implode("\n", $logs),
+            createdAt: $task->createdAt, updatedAt: date('Y-m-d H:i:s')
+        );
+        $this->harnessRepository->save($updatedTask);
+        return $this->harnessRepository->findById($taskId) ?? $updatedTask;
+    }
+
+    private function createStagingWorkspace(int $taskId): string
+    {
+        $root = $this->harnessDir . '/staging';
+        if (!is_dir($root) && !mkdir($root, 0770, true) && !is_dir($root)) {
+            throw new RuntimeException('Không thể tạo vùng staging cho Harness.');
+        }
+        $stage = $root . '/task-' . $taskId . '-' . bin2hex(random_bytes(5));
+        if (!mkdir($stage, 0770, true)) throw new RuntimeException('Không thể khởi tạo workspace staging.');
+        try {
+            foreach (['config', 'src', 'public', 'tests', 'vendor'] as $directory) {
+                $source = $this->basePath . '/' . $directory;
+                if (is_dir($source)) $this->copyDirectory($source, $stage . '/' . $directory);
+            }
+            foreach (['storage', '.harness'] as $directory) {
+                if (!is_dir($stage . '/' . $directory)) mkdir($stage . '/' . $directory, 0770, true);
+            }
+        } catch (\Throwable $e) {
+            $this->removeStagingWorkspace($stage);
+            throw $e;
+        }
+        return $stage;
+    }
+
+    private function copyApiConfigToStage(string $stagePath): void
+    {
+        $source = $this->harnessDir . '/api_config.json';
+        if (!is_file($source)) return;
+        $destination = $stagePath . '/.harness/api_config.json';
+        if (!copy($source, $destination)) throw new RuntimeException('Không thể cấp cấu hình API tạm cho staging.');
+        @chmod($destination, 0600);
+    }
+
+    private function copyDirectory(string $source, string $destination): void
+    {
+        if (!is_dir($destination) && !mkdir($destination, 0775, true) && !is_dir($destination)) {
+            throw new RuntimeException("Không thể tạo thư mục staging {$destination}.");
+        }
+        $iterator = new RecursiveDirectoryIterator($source, RecursiveDirectoryIterator::SKIP_DOTS);
+        foreach ($iterator as $entry) {
+            if ($entry->isLink()) continue;
+            $target = $destination . '/' . $entry->getFilename();
+            if ($entry->isDir()) $this->copyDirectory($entry->getPathname(), $target);
+            elseif ($entry->isFile() && !copy($entry->getPathname(), $target)) {
+                throw new RuntimeException('Không thể sao chép tệp vào staging.');
+            }
+        }
+    }
+
+    private function removeStagingWorkspace(string $stagePath): void
+    {
+        $root = $this->harnessDir . '/staging/';
+        if (!str_starts_with($stagePath, $root) || !is_dir($stagePath)) return;
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($stagePath, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $entry) {
+            if ($entry->isDir() && !$entry->isLink()) @rmdir($entry->getPathname());
+            else @unlink($entry->getPathname());
+        }
+        @rmdir($stagePath);
+    }
+
+    /** @param string[] $changedFiles @param array<string, string> $stageBefore @return string[] */
+    private function createUpdatePackage(int $taskId, string $taskCode, string $stagePath, array $changedFiles, array $stageBefore): array
+    {
+        $packageDir = $this->updatePackageDirectory($taskId);
+        if (is_dir($packageDir)) $this->removeGeneratedDirectory($packageDir, $this->harnessDir . '/updates/');
+        if (!mkdir($packageDir, 0770, true) && !is_dir($packageDir)) throw new RuntimeException('Không thể tạo thư mục gói cập nhật.');
+        $files = [];
+        $deleted = [];
+        $baseFiles = [];
+        foreach ($changedFiles as $changedFile) {
+            if (str_starts_with($changedFile, '.harness/research/')) continue;
+            $isDeleted = str_ends_with($changedFile, ' (deleted)');
+            $relativePath = $isDeleted ? substr($changedFile, 0, -10) : $changedFile;
+            $this->assertInstallablePath($relativePath);
+            $baseFiles[$relativePath] = $stageBefore[$relativePath] ?? null;
+            if ($isDeleted) {
+                $deleted[] = $relativePath;
+                continue;
+            }
+            $source = $stagePath . '/' . $relativePath;
+            if (!is_file($source)) throw new RuntimeException("Thiếu tệp staging để đóng gói: {$relativePath}");
+            $destination = $packageDir . '/files/' . $relativePath;
+            if (!is_dir(dirname($destination)) && !mkdir(dirname($destination), 0775, true) && !is_dir(dirname($destination))) {
+                throw new RuntimeException('Không thể tạo cấu trúc tệp trong gói cập nhật.');
+            }
+            if (!copy($source, $destination)) throw new RuntimeException("Không thể đóng gói tệp {$relativePath}.");
+            $files[$relativePath] = hash_file('sha256', $destination) ?: '';
+        }
+        if ($files === [] && $deleted === []) throw new RuntimeException('Gói cập nhật không chứa tệp để cài đặt.');
+        $manifest = [
+            'schema_version' => 1, 'task_id' => $taskId, 'task_code' => $taskCode,
+            'created_at' => date(DATE_ATOM), 'files' => $files, 'deleted' => $deleted,
+            'base_files' => $baseFiles,
+        ];
+        $written = file_put_contents($packageDir . '/manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), LOCK_EX);
+        if ($written === false) throw new RuntimeException('Không thể ghi manifest gói cập nhật.');
+        return array_merge(array_keys($files), array_map(static fn(string $path): string => $path . ' (deleted)', $deleted));
+    }
+
+    private function copyResearchNoteFromStage(int $taskId, string $taskCode, string $stagePath): void
+    {
+        $safeCode = preg_replace('/[^A-Za-z0-9_-]/', '', $taskCode) ?: ('task-' . $taskId);
+        $source = $stagePath . '/.harness/research/' . $safeCode . '.md';
+        if (!is_file($source)) return;
+        $destinationDir = $this->harnessDir . '/research';
+        if (!is_dir($destinationDir) && !mkdir($destinationDir, 0770, true) && !is_dir($destinationDir)) return;
+        @copy($source, $destinationDir . '/' . $safeCode . '.md');
+    }
+
+    private function updatePackageDirectory(int $taskId): string
+    {
+        return $this->harnessDir . '/updates/task-' . $taskId;
+    }
+
+    /** @param array<string, mixed> $manifest
+     *  @return array{passed: bool, summary: string}
+     */
+    private function verifyInstalledPackage(array $manifest): array
+    {
+        $errors = [];
+        foreach ((array) ($manifest['files'] ?? []) as $relativePath => $expectedHash) {
+            $relativePath = (string) $relativePath;
+            $this->assertInstallablePath($relativePath);
+            $path = $this->basePath . '/' . $relativePath;
+            if (!is_file($path) || !hash_equals((string) $expectedHash, hash_file('sha256', $path) ?: '')) {
+                $errors[] = "Tệp đã cài không khớp gói: {$relativePath}";
+                continue;
+            }
+            if (str_ends_with(strtolower($relativePath), '.php')) {
+                try {
+                    token_get_all((string) file_get_contents($path), TOKEN_PARSE);
+                } catch (\ParseError $e) {
+                    $errors[] = sprintf('%s:%d %s', $relativePath, $e->getLine(), $e->getMessage());
+                }
+            }
+        }
+        foreach ((array) ($manifest['deleted'] ?? []) as $relativePath) {
+            $relativePath = (string) $relativePath;
+            $this->assertInstallablePath($relativePath);
+            if (is_file($this->basePath . '/' . $relativePath)) $errors[] = "Tệp cũ vẫn còn sau cài đặt: {$relativePath}";
+        }
+        return [
+            'passed' => $errors === [],
+            'summary' => $errors === []
+                ? '✅ Cài đặt integrity check đạt: checksum khớp và các tệp PHP hợp lệ.'
+                : implode("\n", $errors),
+        ];
+    }
+
+    private function assertInstallablePath(string $relativePath): void
+    {
+        $normalized = str_replace('\\', '/', $relativePath);
+        if ($normalized !== $relativePath || str_starts_with($normalized, '/')
+            || preg_match('~(^|/)\.\.(/|$)~', $normalized)
+            || $normalized === 'config/app.php'
+            || preg_match('~^(config|src|public|tests)/.+~', $normalized) !== 1) {
+            throw new RuntimeException("Đường dẫn ngoài phạm vi gói cập nhật: {$relativePath}");
+        }
+    }
+
+    private function assertNoSymlinkComponents(string $relativePath): void
+    {
+        $cursor = $this->basePath;
+        foreach (explode('/', $relativePath) as $segment) {
+            $cursor .= '/' . $segment;
+            if (is_link($cursor)) throw new RuntimeException("Gói cập nhật không được ghi qua symbolic link: {$relativePath}");
+        }
+    }
+
+    private function removeGeneratedDirectory(string $directory, string $allowedRoot): void
+    {
+        if (!str_starts_with($directory, $allowedRoot) || !is_dir($directory)) return;
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($iterator as $entry) {
+            if ($entry->isDir() && !$entry->isLink()) @rmdir($entry->getPathname());
+            else @unlink($entry->getPathname());
+        }
+        @rmdir($directory);
     }
 
     /**
@@ -465,8 +843,8 @@ final readonly class TuzygentHarnessService
             : $this->collectPhpFiles(['config', 'src', 'public', 'tests']);
         foreach ($currentFiles as $absPath) {
             $relPath = str_replace($this->basePath . '/', '', $absPath);
-            if (!isset($recordedFiles[$relPath])) {
-                @unlink($absPath);
+            if (!isset($recordedFiles[$relPath]) && !@unlink($absPath) && is_file($absPath)) {
+                return false;
             }
         }
 
@@ -474,15 +852,109 @@ final readonly class TuzygentHarnessService
         foreach ($manifest['files'] as $relPath) {
             $srcFile = $snapDir . '/files/' . $relPath;
             $destFile = $this->basePath . '/' . $relPath;
-            if (is_file($srcFile)) {
-                if (!is_dir(dirname($destFile))) {
-                    mkdir(dirname($destFile), 0775, true);
-                }
-                copy($srcFile, $destFile);
+            if (!is_file($srcFile)) return false;
+            if (!is_dir(dirname($destFile)) && !mkdir(dirname($destFile), 0775, true) && !is_dir(dirname($destFile))) {
+                return false;
             }
+            if (!copy($srcFile, $destFile)) return false;
         }
 
-        return true;
+        return $this->restoreDatabaseBackup($safeId);
+    }
+
+    /** Recover an update process interrupted while the site was in maintenance mode. */
+    public function recoverInterruptedUpdate(): bool
+    {
+        $maintenancePath = $this->basePath . '/storage/update-maintenance.json';
+        if (!is_file($maintenancePath)) return true;
+
+        $lock = fopen($this->harnessDir . '/update-install.lock', 'c');
+        if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+            if (is_resource($lock)) fclose($lock);
+            return false;
+        }
+        try {
+            $state = json_decode((string) @file_get_contents($maintenancePath), true);
+            $snapshotId = is_array($state) ? (string) ($state['snapshot_id'] ?? '') : '';
+            if ($snapshotId === '' || !$this->rollbackToSnapshot($snapshotId)) return false;
+            return unlink($maintenancePath) || !is_file($maintenancePath);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    private function backupDatabaseForSnapshot(string $snapshotId): void
+    {
+        $appConfigPath = $this->basePath . '/config/app.php';
+        $appConfig = is_file($appConfigPath) ? require $appConfigPath : [];
+        $dbConfig = is_array($appConfig) ? (array) ($appConfig['db'] ?? []) : [];
+        $driver = (string) ($dbConfig['driver'] ?? 'sqlite');
+        if ($driver !== 'sqlite') {
+            throw new RuntimeException('Website updater hiện yêu cầu SQLite để tạo và khôi phục bản sao lưu cơ sở dữ liệu an toàn.');
+        }
+        $databasePath = (string) ($dbConfig['sqlite_path'] ?? ($this->basePath . '/storage/database.sqlite'));
+        if (!str_starts_with($databasePath, '/')) $databasePath = $this->basePath . '/' . $databasePath;
+        if (!is_file($databasePath)) return;
+        $backupPath = $this->snapshotsDir . '/' . basename($snapshotId) . '/database.sqlite';
+        $pdo = new \PDO('sqlite:' . $databasePath, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+        $pdo->exec('PRAGMA busy_timeout = 10000');
+        $pdo->exec('PRAGMA wal_checkpoint(FULL)');
+        $quotedBackup = str_replace("'", "''", $backupPath);
+        $pdo->exec("VACUUM INTO '{$quotedBackup}'");
+        @chmod($backupPath, 0600);
+    }
+
+    private function restoreDatabaseBackup(string $snapshotId): bool
+    {
+        $backupPath = $this->snapshotsDir . '/' . basename($snapshotId) . '/database.sqlite';
+        if (!is_file($backupPath)) return true;
+        $appConfigPath = $this->basePath . '/config/app.php';
+        $appConfig = is_file($appConfigPath) ? require $appConfigPath : [];
+        $dbConfig = is_array($appConfig) ? (array) ($appConfig['db'] ?? []) : [];
+        $databasePath = (string) ($dbConfig['sqlite_path'] ?? ($this->basePath . '/storage/database.sqlite'));
+        if (!str_starts_with($databasePath, '/')) $databasePath = $this->basePath . '/' . $databasePath;
+        $pdo = new \PDO('sqlite:' . $databasePath, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+        $pdo->exec('PRAGMA busy_timeout = 10000');
+        $pdo->exec('PRAGMA foreign_keys = OFF');
+        $pdo->exec('ATTACH DATABASE ' . $pdo->quote($backupPath) . ' AS update_backup');
+        try {
+            $pdo->beginTransaction();
+            $objects = $pdo->query("SELECT type, name FROM main.sqlite_master WHERE type IN ('view','trigger','index','table') AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'view' THEN 0 WHEN 'trigger' THEN 1 WHEN 'index' THEN 2 ELSE 3 END")->fetchAll(\PDO::FETCH_ASSOC);
+            foreach ($objects as $object) {
+                $name = '"' . str_replace('"', '""', (string) $object['name']) . '"';
+                $pdo->exec('DROP ' . strtoupper((string) $object['type']) . ' IF EXISTS main.' . $name);
+            }
+
+            $schemas = $pdo->query("SELECT type, sql FROM update_backup.sqlite_master WHERE sql IS NOT NULL AND type IN ('table','index','trigger','view') AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 WHEN 'trigger' THEN 2 ELSE 3 END")->fetchAll(\PDO::FETCH_ASSOC);
+            foreach ($schemas as $schema) $pdo->exec((string) $schema['sql']);
+
+            $tables = $pdo->query("SELECT name FROM update_backup.sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")->fetchAll(\PDO::FETCH_COLUMN);
+            foreach ($tables as $table) {
+                $quoted = '"' . str_replace('"', '""', (string) $table) . '"';
+                $pdo->exec('INSERT INTO main.' . $quoted . ' SELECT * FROM update_backup.' . $quoted);
+            }
+
+            $hasMainSequence = (bool) $pdo->query("SELECT 1 FROM main.sqlite_master WHERE type='table' AND name='sqlite_sequence'")->fetchColumn();
+            if ($hasMainSequence) $pdo->exec('DELETE FROM main.sqlite_sequence');
+            $hasSequence = (bool) $pdo->query("SELECT 1 FROM update_backup.sqlite_master WHERE type='table' AND name='sqlite_sequence'")->fetchColumn();
+            if ($hasSequence) {
+                $sequences = $pdo->query('SELECT name, seq FROM update_backup.sqlite_sequence')->fetchAll(\PDO::FETCH_ASSOC);
+                $insertSequence = $pdo->prepare('INSERT INTO main.sqlite_sequence (name, seq) VALUES (?, ?)');
+                foreach ($sequences as $sequence) $insertSequence->execute([(string) $sequence['name'], (int) $sequence['seq']]);
+            }
+            $userVersion = (int) $pdo->query('PRAGMA update_backup.user_version')->fetchColumn();
+            $applicationId = (int) $pdo->query('PRAGMA update_backup.application_id')->fetchColumn();
+            $pdo->commit();
+            $pdo->exec('PRAGMA user_version = ' . $userVersion);
+            $pdo->exec('PRAGMA application_id = ' . $applicationId);
+            return true;
+        } catch (\Throwable) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            return false;
+        } finally {
+            try { $pdo->exec('DETACH DATABASE update_backup'); } catch (\Throwable) {}
+        }
     }
 
     /**
@@ -532,6 +1004,7 @@ final readonly class TuzygentHarnessService
      *     tasks_executed: int,
      *     tasks_succeeded: int,
      *     tasks_rolled_back: int,
+     *     tasks_failed: int,
      *     started_at: string,
      *     last_heartbeat: string,
      *     last_cycle_summary: string,
@@ -554,6 +1027,7 @@ final readonly class TuzygentHarnessService
             'tasks_executed' => 0,
             'tasks_succeeded' => 0,
             'tasks_rolled_back' => 0,
+            'tasks_failed' => 0,
             'started_at' => '',
             'last_heartbeat' => '',
             'last_cycle_summary' => 'Chưa chạy chu kỳ Continuous nào.',
@@ -596,6 +1070,7 @@ final readonly class TuzygentHarnessService
             'tasks_executed' => max(0, (int) ($raw['tasks_executed'] ?? 0)),
             'tasks_succeeded' => max(0, (int) ($raw['tasks_succeeded'] ?? 0)),
             'tasks_rolled_back' => max(0, (int) ($raw['tasks_rolled_back'] ?? 0)),
+            'tasks_failed' => max(0, (int) ($raw['tasks_failed'] ?? 0)),
             'started_at' => (string) ($raw['started_at'] ?? ''),
             'last_heartbeat' => (string) ($raw['last_heartbeat'] ?? ''),
             'last_cycle_summary' => (string) ($raw['last_cycle_summary'] ?? $defaults['last_cycle_summary']),
@@ -731,7 +1206,7 @@ final readonly class TuzygentHarnessService
      *     state: array<string, mixed>
      * }
      */
-    public function runContinuousCycle(?bool $overrideAutoDiscover = null): array
+    public function runContinuousCycle(?bool $overrideAutoDiscover = null, bool $queueTaskOnly = false): array
     {
         $state = $this->getContinuousState();
         $cycle = $state['cycles_completed'] + 1;
@@ -764,27 +1239,57 @@ final readonly class TuzygentHarnessService
         // Trường hợp có Task trong Backlog cần thực thi
         if (!empty($backlogTasks)) {
             $nextTask = $backlogTasks[0];
+            if ($queueTaskOnly) {
+                $summary = sprintf('Chu kỳ #%d: Đã gửi %s vào hàng đợi Workers.', $cycle, $nextTask->taskCode);
+                array_unshift($events, sprintf('[%s] 📥 %s', date('H:i:s'), $summary));
+                $updatedState = $this->saveContinuousState([
+                    'cycles_completed' => $cycle,
+                    'last_heartbeat' => date('Y-m-d H:i:s'),
+                    'last_cycle_summary' => $summary,
+                    'recent_events' => array_slice($events, 0, 25),
+                ]);
+                return [
+                    'cycle' => $cycle,
+                    'action' => 'queue_task',
+                    'task' => $nextTask,
+                    'gate_passed' => true,
+                    'summary' => $summary,
+                    'state' => $updatedState,
+                ];
+            }
             $executed = $this->executeTask((int) $nextTask->id);
-            $passed = ($executed->status === HarnessTaskStatus::COMPLETED);
+            $passed = in_array($executed->status, [HarnessTaskStatus::COMPLETED, HarnessTaskStatus::READY_TO_INSTALL], true);
 
             $tasksExecuted = $state['tasks_executed'] + 1;
             $tasksSucceeded = $state['tasks_succeeded'] + ($passed ? 1 : 0);
-            $tasksRolledBack = $state['tasks_rolled_back'] + ($passed ? 0 : 1);
+            $rolledBack = $executed->status === HarnessTaskStatus::ROLLED_BACK;
+            $failed = $executed->status === HarnessTaskStatus::FAILED;
+            $tasksRolledBack = $state['tasks_rolled_back'] + ($rolledBack ? 1 : 0);
+            $tasksFailed = $state['tasks_failed'] + ($failed ? 1 : 0);
             $lastHealthySnap = $passed && $executed->snapshotId !== ''
                 ? $executed->snapshotId
                 : $state['last_healthy_snapshot'];
 
-            $summary = $passed
-                ? sprintf('Chu kỳ #%d: Hoàn tất %s (%s) sau %d lần thử — PASS 3/3 Gates!', $cycle, $executed->taskCode, $executed->title, $executed->attempts)
-                : sprintf('Chu kỳ #%d: Task %s thất bại & đã Auto-Rollback về Snapshot [%s].', $cycle, $executed->taskCode, $executed->snapshotId);
+            $summary = $executed->status === HarnessTaskStatus::READY_TO_INSTALL
+                ? sprintf('Chu kỳ #%d: Gói cập nhật %s đã vượt Gate và đang chờ cài đặt từ Dashboard.', $cycle, $executed->taskCode)
+                : ($passed
+                    ? sprintf('Chu kỳ #%d: Hoàn tất %s (%s) sau %d lần thử — PASS 3/3 Gates!', $cycle, $executed->taskCode, $executed->title, $executed->attempts)
+                    : sprintf('Chu kỳ #%d: Task %s thất bại; website được giữ nguyên.', $cycle, $executed->taskCode));
 
-            array_unshift($events, sprintf('[%s] %s %s', date('H:i:s'), $passed ? '✅' : '⏪', $summary));
+            $eventIcon = match ($executed->status) {
+                HarnessTaskStatus::READY_TO_INSTALL => '📦',
+                HarnessTaskStatus::COMPLETED => '✅',
+                HarnessTaskStatus::ROLLED_BACK => '⏪',
+                default => '❌',
+            };
+            array_unshift($events, sprintf('[%s] %s %s', date('H:i:s'), $eventIcon, $summary));
 
             $updatedState = $this->saveContinuousState([
                 'cycles_completed' => $cycle,
                 'tasks_executed' => $tasksExecuted,
                 'tasks_succeeded' => $tasksSucceeded,
                 'tasks_rolled_back' => $tasksRolledBack,
+                'tasks_failed' => $tasksFailed,
                 'last_heartbeat' => date('Y-m-d H:i:s'),
                 'last_cycle_summary' => $summary,
                 'last_healthy_snapshot' => $lastHealthySnap,
@@ -903,12 +1408,12 @@ final readonly class TuzygentHarnessService
             if ($task->targetName !== 'AutoTopic' || $task->actionType !== 'research_and_develop') {
                 continue;
             }
-            if ($task->status === HarnessTaskStatus::BACKLOG || $task->status === HarnessTaskStatus::RUNNING) {
+            if (in_array($task->status, [HarnessTaskStatus::BACKLOG, HarnessTaskStatus::RUNNING, HarnessTaskStatus::READY_TO_INSTALL], true)) {
                 return null;
             }
         }
 
-        // Ưu tiên Codex, sau đó dùng các coding CLI khác đã được Harness hỗ trợ.
+        // Chỉ tự khám phá đề tài bằng API khi đã cấu hình thông tin truy cập.
         $agentBackend = $this->availableBrainstormBackend();
         if ($agentBackend !== null) {
             $existingTargets = [];
@@ -966,7 +1471,7 @@ SPEC,
 
         $existingTargets = [];
         foreach ($this->harnessRepository->findAll() as $t) {
-            if ($t->targetName !== '' && $t->status === HarnessTaskStatus::COMPLETED) {
+            if ($t->targetName !== '' && in_array($t->status, [HarnessTaskStatus::COMPLETED, HarnessTaskStatus::READY_TO_INSTALL], true)) {
                 $existingTargets[strtolower($t->targetName)] = true;
             }
         }
@@ -990,17 +1495,11 @@ SPEC,
 
     private function availableBrainstormBackend(): ?string
     {
-        foreach (['codex', 'claude', 'gemini', 'opencode', 'cursor-agent'] as $backend) {
-            if ($this->isBinaryAvailable($backend)) {
-                return $backend;
-            }
-        }
-
-        return null;
+        return $this->getApiConfig()['configured'] ? 'openai-compatible' : null;
     }
 
     /**
-     * Bước đề xuất / sinh code mới của Agent (hỗ trợ Built-in Hexagonal Generator & External CLI Agents).
+     * Bước đề xuất / sinh code mới qua API hoặc bộ sinh Hexagonal tích hợp.
      *
      * @param string[] $logs
      * @return string[] Danh sách các tệp đã tạo/cập nhật
@@ -1014,9 +1513,9 @@ SPEC,
 
         if ($task->actionType === 'research_and_develop') {
             if ($task->agentBackend === 'builtin-hexagonal') {
-                throw new RuntimeException('Tác vụ nghiên cứu cần chọn một AI Agent CLI (Codex, Claude, Gemini, OpenCode hoặc Cursor).');
+                throw new RuntimeException('Tác vụ nghiên cứu cần chọn OpenAI-compatible API.');
             }
-            return $this->runExternalAgent($task, $failureFeedback, $logs, $onProgress);
+            return $this->runOpenAiCompatible($task, $failureFeedback, $logs, $onProgress);
         }
 
         if ($task->actionType === 'scaffold_module' || $task->agentBackend === 'builtin-hexagonal') {
@@ -1027,16 +1526,16 @@ SPEC,
             return $generated;
         }
 
-        return $this->runExternalAgent($task, $failureFeedback, $logs, $onProgress);
+        return $this->runOpenAiCompatible($task, $failureFeedback, $logs, $onProgress);
     }
 
     /**
-     * Chạy coding agent ở chế độ headless trong thư mục dự án và thu thập các tệp đã đổi.
+     * Gọi OpenAI-compatible API; unified diff chỉ được áp dụng vào workspace staging.
      *
      * @param string[] $logs
      * @return string[]
      */
-    private function runExternalAgent(HarnessTask $task, string $failureFeedback, array &$logs, ?callable $onProgress = null): array
+    private function runOpenAiCompatible(HarnessTask $task, string $failureFeedback, array &$logs, ?callable $onProgress = null): array
     {
         $harnessDir = $this->basePath . '/.harness';
         if (!is_dir($harnessDir)) {
@@ -1047,38 +1546,66 @@ SPEC,
         file_put_contents($promptFile, $promptContent);
         $logs[] = sprintf('[%s] 📝 Đã xuất ngữ cảnh kiến trúc & đặc tả vào .harness/CURRENT_TASK_PROMPT.md', date('H:i:s'));
 
-        $binary = [
-            'claude' => 'claude',
-            'codex' => 'codex',
-            'gemini' => 'gemini',
-            'opencode' => 'opencode',
-            'cursor-agent' => 'cursor-agent',
-        ][$task->agentBackend] ?? null;
-        if ($binary === null || !$this->isBinaryAvailable($binary)) {
-            throw new RuntimeException("Không tìm thấy CLI Agent '{$task->agentBackend}' trên PATH.");
+        $configPath = $this->harnessDir . '/api_config.json';
+        $config = is_file($configPath) ? json_decode((string) file_get_contents($configPath), true) : null;
+        if (!is_array($config) || empty($config['api_key']) || empty($config['model']) || empty($config['base_url'])) {
+            throw new RuntimeException('Hãy cấu hình Base URL, API key và Model trong Dashboard Harness trước khi chạy task.');
         }
-
-        $prompt = "Đọc và thực hiện đầy đủ chỉ dẫn trong .harness/CURRENT_TASK_PROMPT.md.\n"
-            . "Hãy nghiên cứu đề tài bằng các nguồn hiện có, ghi báo cáo và URL nguồn vào đúng đường dẫn được nêu trong prompt, sau đó trực tiếp triển khai tính năng trong repository.\n"
-            . "Chạy ./bin/tuzygent verify khi hoàn tất và sửa các lỗi do thay đổi của bạn gây ra.";
-        $command = $this->buildAgentCommand($task->agentBackend, $binary, $prompt);
+        $prompt = "Thực hiện task lập trình dưới đây. Trả về unified diff nhỏ nhất có thể, không markdown fence, không giải thích. Chỉ sửa các tệp thật sự cần thiết; không tạo lại toàn bộ module nếu có thể chia thành lát cắt nhỏ. Diff phải dùng đường dẫn tương đối từ root, không sửa tệp ngoài config/, src/, public/, tests/ hoặc .harness/research/; tuyệt đối không thay đổi config/app.php vì đây là cấu hình riêng của website. Nếu không cần thay đổi, trả về NO_CHANGES.\n\n"
+            . $promptContent . "\n\n## Relevant repository files (task-scoped, truncated)\n" . $this->buildApiSourceContext($task)
+            . "\nYêu cầu bổ sung: chạy verify sẽ được Harness thực hiện sau khi áp dụng diff. Feedback lần trước: {$failureFeedback}\n";
+        $logs[] = sprintf('[%s] 🌐 Gọi OpenAI-compatible API (%s).', date('H:i:s'), (string) $config['model']);
         $before = $this->captureManagedFileHashes();
-        $logs[] = sprintf('[%s] 🤖 Khởi chạy %s ở chế độ tự hành trong %s.', date('H:i:s'), $task->agentBackend, $this->basePath);
         if ($onProgress !== null) {
-            $onProgress([], sprintf('%s đang đọc yêu cầu và phân tích source code.', ucfirst($task->agentBackend)));
+            $onProgress([], 'Đang gửi yêu cầu tới OpenAI-compatible API.');
         }
-
-        [$exitCode, $output] = $this->runProcess($command, 900, function () use ($before, $task, $onProgress): void {
-            if ($onProgress === null) {
-                return;
+        $payload = json_encode(['model' => $config['model'], 'messages' => [
+            ['role' => 'system', 'content' => 'You are a careful software engineer. Return only a unified diff.'],
+            ['role' => 'user', 'content' => $prompt],
+        ], 'temperature' => 0.2], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $context = stream_context_create(['http' => [
+            'method' => 'POST', 'timeout' => 540, 'ignore_errors' => true,
+            'header' => "Content-Type: application/json\r\nAuthorization: Bearer {$config['api_key']}\r\n",
+            'content' => $payload,
+        ]]);
+        $response = @file_get_contents(rtrim((string) $config['base_url'], '/') . '/chat/completions', false, $context);
+        if ($response === false) {
+            $streamError = strtolower((string) (error_get_last()['message'] ?? ''));
+            if (str_contains($streamError, 'timed out') || str_contains($streamError, 'timeout')) {
+                throw new RuntimeException('OpenAI-compatible API timeout sau 540 giây; không có đề xuất nào được áp dụng.');
             }
-            $changed = $this->findChangedManagedFiles($before);
-            $summary = $changed === []
-                ? sprintf('%s đang phân tích task; chưa ghi nhận tệp thay đổi.', ucfirst($task->agentBackend))
-                : sprintf('%s đang sửa %d tệp.', ucfirst($task->agentBackend), count($changed));
-            $onProgress($changed, $summary);
-        });
-        $output = trim($output);
+            throw new RuntimeException('Không kết nối được OpenAI-compatible API. Kiểm tra Base URL và kết nối mạng máy chủ.');
+        }
+        $statusLine = is_array($http_response_header ?? null) ? ($http_response_header[0] ?? '') : '';
+        if (preg_match('~\\s([45][0-9]{2})\\s~', $statusLine, $statusMatch) === 1) {
+            throw new RuntimeException('OpenAI-compatible API trả HTTP ' . $statusMatch[1] . '. Kiểm tra Base URL, API key và model.');
+        }
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded) || isset($decoded['error'])) {
+            throw new RuntimeException('API trả lỗi: ' . (string) ($decoded['error']['message'] ?? substr($response, 0, 1000)));
+        }
+        $output = trim((string) ($decoded['choices'][0]['message']['content'] ?? ''));
+        $output = preg_replace('/^```(?:diff)?\s*|\s*```$/', '', $output) ?? $output;
+        if ($output === 'NO_CHANGES') {
+            throw new RuntimeException('API không đề xuất thay đổi nào.');
+        }
+        if (preg_match_all('/^\+\+\+ b\/(.+)$/m', $output, $matches) === false || empty($matches[1])) {
+            throw new RuntimeException('API không trả về unified diff hợp lệ.');
+        }
+        foreach ($matches[1] as $relativePath) {
+            $normalized = str_replace('\\', '/', $relativePath);
+            if (str_starts_with($normalized, '/') || preg_match('~(^|/)\.\.(/|$)~', $normalized)
+                || $normalized === 'config/app.php'
+                || preg_match('~^(config|src|public|tests|\.harness/research)/~', $normalized) !== 1) {
+                throw new RuntimeException("API đề xuất sửa tệp ngoài phạm vi cho phép: {$relativePath}");
+            }
+        }
+        $patchFile = $this->harnessDir . '/CURRENT_TASK.patch';
+        file_put_contents($patchFile, $output, LOCK_EX);
+        [$exitCode, $applyOutput] = $this->runProcess(['git', 'apply', '--whitespace=nowarn', '--', $patchFile], 60);
+        if ($exitCode !== 0) {
+            throw new RuntimeException('Không thể áp dụng unified diff do API: ' . trim($applyOutput));
+        }
 
         if ($task->actionType === 'research_and_develop') {
             $researchDir = $this->harnessDir . '/research';
@@ -1087,13 +1614,9 @@ SPEC,
             }
             $researchRel = '.harness/research/' . $task->taskCode . '.md';
             $researchPath = $this->basePath . '/' . $researchRel;
-            if (!is_file($researchPath) && $output !== '') {
-                file_put_contents($researchPath, "# Research: {$task->title}\n\nAgent output (fallback record):\n\n{$output}\n");
+            if (!is_file($researchPath)) {
+                file_put_contents($researchPath, "# Research: {$task->title}\n\n{$task->specification}\n");
             }
-        }
-
-        if ($exitCode !== 0) {
-            throw new RuntimeException($this->summarizeAgentFailure($task->agentBackend, $exitCode, $output));
         }
 
         $changed = $this->findChangedManagedFiles($before);
@@ -1104,22 +1627,46 @@ SPEC,
         if (empty($implementationChanges)) {
             throw new RuntimeException('Agent kết thúc thành công nhưng không tạo hoặc sửa tệp nào trong phạm vi dự án.');
         }
-        $logs[] = sprintf('[%s] 📄 Agent đã thay đổi %d tệp.', date('H:i:s'), count($changed));
+        $logs[] = sprintf('[%s] 📄 API đã đề xuất thay đổi %d tệp.', date('H:i:s'), count($changed));
         return $changed;
     }
 
-    /** @return string[] */
-    private function buildAgentCommand(string $backend, string $binary, string $prompt): array
+    private function buildApiSourceContext(HarnessTask $task): string
     {
-        return match ($backend) {
-            // --approve-for-me already selects the workspace-write sandbox in this CLI version.
-            'codex' => [$binary, 'exec', '--cd', $this->basePath, '--skip-git-repo-check', '--approve-for-me', $prompt],
-            'claude' => [$binary, '--print', '--dangerously-skip-permissions', '--max-turns', '30', $prompt],
-            'gemini' => [$binary, '--approval-mode', 'yolo', '--prompt', $prompt],
-            'opencode' => [$binary, 'run', '--dir', $this->basePath, '--auto', $prompt],
-            'cursor-agent' => [$binary, '-p', '--force', $prompt],
-            default => throw new RuntimeException("Backend không được hỗ trợ: {$backend}"),
-        };
+        $terms = preg_split('/[^\p{L}\p{N}_]+/u', mb_strtolower($task->title . ' ' . $task->targetName . ' ' . $task->specification)) ?: [];
+        $terms = array_values(array_unique(array_filter($terms, static fn(string $term): bool => mb_strlen($term) >= 4)));
+        $candidates = [];
+        foreach (['config', 'src', 'public'] as $dir) {
+            $absolute = $this->basePath . '/' . $dir;
+            if (!is_dir($absolute)) continue;
+            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($absolute, RecursiveDirectoryIterator::SKIP_DOTS));
+            foreach ($iterator as $file) {
+                if ($file->isFile() && preg_match('/\.(php|sql|md|json)$/i', $file->getFilename())) {
+                    $path = $file->getPathname();
+                    $relative = substr($path, strlen($this->basePath) + 1);
+                    $pathText = mb_strtolower($relative);
+                    $content = @file_get_contents($path);
+                    if ($content === false) continue;
+                    $contentText = mb_strtolower($content);
+                    $score = 0;
+                    foreach ($terms as $term) {
+                        if (str_contains($pathText, $term)) $score += 8;
+                        $score += min(4, substr_count($contentText, $term));
+                    }
+                    $candidates[] = ['path' => $path, 'relative' => $relative, 'content' => $content, 'score' => $score];
+                }
+            }
+        }
+        usort($candidates, static fn(array $a, array $b): int => ($b['score'] <=> $a['score']) ?: strcmp($a['relative'], $b['relative']));
+        $context = '';
+        foreach (array_slice($candidates, 0, 24) as $candidate) {
+            $content = (string) $candidate['content'];
+            $remaining = 42000 - strlen($context);
+            if ($remaining <= 0) break;
+            if (strlen($content) > $remaining) $content = substr($content, 0, $remaining) . "\n… [file truncated]";
+            $context .= "\n### {$candidate['relative']}\n```\n{$content}\n```\n";
+        }
+        return $context;
     }
 
     /** @return array{0: int, 1: string} */
@@ -1128,7 +1675,7 @@ SPEC,
         $pipes = [];
         $process = proc_open($command, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $this->basePath);
         if (!is_resource($process)) {
-            throw new RuntimeException('Không thể khởi chạy AI Agent CLI.');
+            throw new RuntimeException('Không thể khởi chạy tiến trình xác minh unified diff.');
         }
 
         fclose($pipes[0]);
@@ -1228,21 +1775,6 @@ SPEC,
         }
         sort($changed);
         return $changed;
-    }
-
-    private function summarizeAgentFailure(string $backend, int $exitCode, string $output): string
-    {
-        $normalized = strtolower($output);
-        if (str_contains($normalized, 'not inside a trusted directory')) {
-            return sprintf('%s không chấp nhận workspace hiện tại (exit code %d).', $backend, $exitCode);
-        }
-        if (str_contains($normalized, 'not logged in') || str_contains($normalized, 'authentication required')) {
-            return sprintf('%s chưa đăng nhập (exit code %d).', $backend, $exitCode);
-        }
-        if (str_contains($normalized, 'unexpected argument') || str_contains($normalized, 'unrecognized flag')) {
-            return sprintf('%s từ chối tham số CLI (exit code %d).', $backend, $exitCode);
-        }
-        return sprintf('%s không hoàn tất (exit code %d).', $backend, $exitCode);
     }
 
     /**
@@ -1473,7 +2005,7 @@ PHP;
 4. All code changes MUST pass `./bin/tuzygent verify` (Syntax Lint + Hexagonal Purity Check + Integration Tests).
 ## EXECUTION PLAN
 1. Inspect the current repository and identify the relevant existing features, conventions, and missing behavior.
-2. For `research_and_develop`, research the requested topic with available web/search tools and reliable primary sources. Write a concise report to `{$researchRel}` before editing implementation code. Include the question, findings, source URLs, dates where available, and how each finding affects the feature. Never invent sources; state clearly when external research is unavailable.
+2. For `research_and_develop`, write a concise report to `{$researchRel}` as part of the returned diff. The API has no browsing tools: do not claim live research or invent source URLs; state clearly when external research is unavailable.
 3. Implement the requested, production-ready feature in this repository. Add or update focused regression coverage where appropriate, then run `./bin/tuzygent verify` and address failures caused by your changes.
 4. Summarize changed files, decisions, verification results, and research limitations in your final response.
 {$feedbackSection}
@@ -1548,11 +2080,4 @@ MD;
         return $files;
     }
 
-    private function isBinaryAvailable(string $binary): bool
-    {
-        $out = [];
-        $code = 1;
-        exec(sprintf('command -v %s >/dev/null 2>&1', escapeshellarg($binary)), $out, $code);
-        return $code === 0;
-    }
 }

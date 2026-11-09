@@ -57,31 +57,28 @@ $isEdit = $post !== null;
 
         <div class="wp-card wp-mb-20">
             <label id="post-content-label" for="raw-content">Nội dung bài viết</label>
-            <div class="wp-editor-toolbar">
-                <button type="button" onclick="formatDoc('bold')" title="In đậm"><b>B</b></button>
-                <button type="button" onclick="formatDoc('italic')" title="In nghiêng"><i>I</i></button>
-                <button type="button" onclick="formatDoc('underline')" title="Gạch chân"><u>U</u></button>
-                <button type="button" onclick="formatDoc('formatBlock', 'H2')">H2</button>
-                <button type="button" onclick="formatDoc('formatBlock', 'H3')">H3</button>
-                <button type="button" onclick="formatDoc('insertUnorderedList')">• Danh sách</button>
-                <button type="button" onclick="formatDoc('insertOrderedList')">1. Danh sách</button>
-                <button type="button" onclick="insertLinkPrompt()">🔗 Chèn Link</button>
-                <button type="button" onclick="toggleSourceMode()" class="wp-toolbar-right">«/» Xem mã HTML</button>
-            </div>
-            <div
-                id="visual-editor"
-                class="wp-visual-editor"
-                contenteditable="true"
-                aria-labelledby="post-content-label"
-                oninput="syncEditorContent()"
-                style="display:none;"
-            ></div>
+            <div class="wp-rich-text-editor" data-rich-text-editor data-source-id="raw-content">
+                <div class="wp-editor-toolbar" data-rich-text-toolbar role="toolbar" aria-label="Công cụ định dạng nội dung">
+                    <button type="button" data-editor-command="bold" title="In đậm"><b>B</b></button>
+                    <button type="button" data-editor-command="italic" title="In nghiêng"><i>I</i></button>
+                    <button type="button" data-editor-command="underline" title="Gạch chân"><u>U</u></button>
+                    <button type="button" data-editor-command="strike" title="Gạch ngang"><s>S</s></button>
+                    <select data-editor-command="heading" aria-label="Kiểu tiêu đề"><option value="p">Đoạn văn</option><option value="h2">Tiêu đề 2</option><option value="h3">Tiêu đề 3</option><option value="h4">Tiêu đề 4</option></select>
+                    <button type="button" data-editor-command="bulletList">• Danh sách</button><button type="button" data-editor-command="orderedList">1. Danh sách</button>
+                    <button type="button" data-editor-command="blockquote">Trích dẫn</button><button type="button" data-editor-command="link">🔗 Link</button><button type="button" data-editor-command="unlink">Bỏ link</button>
+                    <button type="button" data-editor-command="insertTable">▦ Bảng</button><button type="button" data-editor-command="addRow">＋ Hàng</button><button type="button" data-editor-command="deleteTable">Xóa bảng</button>
+                    <button type="button" data-editor-command="image" title="Chọn ảnh, sau đó kéo nút ở góc để đổi kích thước">🖼 Ảnh</button><button type="button" data-editor-command="youtube">▶ Video</button>
+                    <button type="button" data-editor-command="alignLeft">≡</button><button type="button" data-editor-command="alignCenter">☰</button><button type="button" data-editor-command="alignRight">≡</button>
+                    <button type="button" data-editor-command="undo">↶</button><button type="button" data-editor-command="redo">↷</button><button type="button" data-editor-command="source" class="wp-toolbar-right">&lt;/&gt; HTML</button>
+                </div>
+                <div id="visual-editor" class="wp-visual-editor" data-rich-text-surface role="textbox" aria-multiline="true" aria-labelledby="post-content-label" hidden></div>
             <textarea
                 name="content"
                 id="raw-content"
                 rows="14"
                 class="wp-textarea"
             ><?= htmlspecialchars($post->content ?? '<p>Bắt đầu viết nội dung bài viết tại đây...</p>') ?></textarea>
+            </div>
         </div>
 
         <div class="wp-card">
@@ -113,7 +110,7 @@ $isEdit = $post !== null;
                     <option value="trash" <?= ($post?->status->value ?? '') === 'trash' ? 'selected' : '' ?>>Thùng rác (Trash)</option>
                 </select>
             </div>
-            <button type="submit" class="wp-btn wp-btn-primary wp-btn-block" onclick="syncEditorContent()">
+            <button type="submit" class="wp-btn wp-btn-primary wp-btn-block">
                 💾 <?= $isEdit ? 'Cập nhật Bài viết' : 'Xuất bản Bài viết' ?>
             </button>
         </div>
@@ -206,3 +203,10 @@ $isEdit = $post !== null;
         </div>
     </aside>
 </form>
+
+<dialog class="product-media-dialog" id="rich-text-media-dialog" aria-label="Chọn ảnh trong thư viện Media">
+    <div class="product-media-dialog-header"><strong class="rich-media-dialog-title" role="heading" aria-level="2">Chèn ảnh từ Media Library</strong><button type="button" class="wp-btn wp-btn-secondary" data-rich-media-close>✕</button></div>
+    <div class="product-media-toolbar"><label class="product-media-search"><span>⌕</span><input type="search" placeholder="Tìm ảnh…" data-rich-media-search></label><div class="product-media-toolbar-actions"><input type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden data-rich-media-upload><button type="button" class="wp-btn wp-btn-secondary" data-rich-media-upload-button>⬆️ Tải ảnh lên</button></div></div>
+    <div class="product-media-grid" data-rich-media-grid></div>
+    <div class="product-media-dialog-footer"><span data-rich-media-page></span><div><button type="button" class="wp-btn wp-btn-secondary" data-rich-media-prev>←</button><button type="button" class="wp-btn wp-btn-secondary" data-rich-media-next>→</button></div><button type="button" class="wp-btn wp-btn-primary" data-rich-media-insert disabled>Chèn ảnh</button></div>
+</dialog>

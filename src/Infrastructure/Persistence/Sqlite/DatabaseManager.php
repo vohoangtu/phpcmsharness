@@ -421,6 +421,7 @@ final class DatabaseManager
 
     private function ensureMediaDimensions(PDO $pdo): void
     {
+        $pdo->exec('CREATE TABLE IF NOT EXISTS media_folders (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, parent_id INTEGER NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(parent_id) REFERENCES media_folders(id) ON DELETE SET NULL)');
         $columns = $pdo->query('PRAGMA table_info(media)')->fetchAll(PDO::FETCH_ASSOC);
         $columnNames = array_column($columns, 'name');
         if (!in_array('width', $columnNames, true)) {
@@ -429,5 +430,9 @@ final class DatabaseManager
         if (!in_array('height', $columnNames, true)) {
             $pdo->exec('ALTER TABLE media ADD COLUMN height INTEGER NULL');
         }
+        if (!in_array('folder_id', $columnNames, true)) $pdo->exec('ALTER TABLE media ADD COLUMN folder_id INTEGER NULL');
+        if (!in_array('tags', $columnNames, true)) $pdo->exec("ALTER TABLE media ADD COLUMN tags TEXT NOT NULL DEFAULT ''");
+        if (!in_array('last_used_at', $columnNames, true)) $pdo->exec('ALTER TABLE media ADD COLUMN last_used_at TEXT NULL');
+        if (!in_array('use_count', $columnNames, true)) $pdo->exec('ALTER TABLE media ADD COLUMN use_count INTEGER NOT NULL DEFAULT 0');
     }
 }
