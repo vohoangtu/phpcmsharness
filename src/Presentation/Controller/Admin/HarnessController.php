@@ -24,7 +24,6 @@ final class HarnessController extends BaseController
     public function index(): void
     {
         $harness = $this->container->get(TuzygentHarnessService::class);
-        $gateReport = $harness->runVerificationGate();
         $tasks = $harness->listTasks();
 
         $this->view->renderAdmin('admin/harness/index', [
@@ -34,8 +33,8 @@ final class HarnessController extends BaseController
             'agents' => $harness->discoverAgents(),
             'apiConfig' => $harness->getApiConfig(),
             'snapshots' => $harness->listSnapshots(),
-            'gateReport' => $gateReport,
-            'continuousState' => $harness->getContinuousState(),
+            'gateReport' => ['passed' => false, 'gates' => [], 'summary' => 'Chạy kiểm định thủ công để xem kết quả.'],
+            'continuousState' => $this->withTaskCounts($harness->getContinuousState(), $tasks),
         ]);
     }
 
@@ -96,7 +95,8 @@ final class HarnessController extends BaseController
     public function verify(): void
     {
         $harness = $this->container->get(TuzygentHarnessService::class);
-        $report = $harness->runVerificationGate();
+        try { $report = $harness->runVerificationGate(); }
+        catch (\Throwable $e) { $this->flash('error', $e->getMessage()); $this->redirect('/admin/harness'); return; }
         if ($report['passed']) {
             $this->flash('success', '✅ Cả 3 Cổng Kiểm Định (Syntax + Hexagonal Purity + Integration Tests) đều PASS 100%!');
         } else {
@@ -145,13 +145,11 @@ final class HarnessController extends BaseController
 
         $interval = max(1, min(300, (int) ($_POST['interval_seconds'] ?? 5)));
         $autoDiscover = !empty($_POST['auto_discover']);
-        $autoHeal = !empty($_POST['auto_heal_on_drift']);
         $spawnDaemon = !empty($_POST['spawn_daemon']);
 
         $state = $harness->startContinuousMode([
             'interval_seconds' => $interval,
             'auto_discover' => $autoDiscover,
-            'auto_heal_on_drift' => $autoHeal,
             'spawn_daemon' => $spawnDaemon,
         ]);
 
@@ -192,7 +190,7 @@ final class HarnessController extends BaseController
             exit;
         }
 
-        if ($cycle['gate_passed']) {
+        if ($cycle['gate_passed'] || (in_array($cycle['action'], ['queue_task', 'busy'], true) && $cycle['gate_passed'] === null)) {
             $this->flash('success', '⚡ ' . $cycle['summary']);
         } else {
             $this->flash('error', '⚠️ ' . $cycle['summary']);
@@ -203,8 +201,9 @@ final class HarnessController extends BaseController
     public function continuousStatus(): void
     {
         $harness = $this->container->get(TuzygentHarnessService::class);
-        $state = $harness->getContinuousState();
-        $state['tasks'] = array_values($this->taskProgressFormatter->format(array_slice($harness->listTasks(), 0, 60)));
+        $tasks = $harness->listTasks();
+        $state = $this->withTaskCounts($harness->getContinuousState(), $tasks);
+        $state['tasks'] = array_values($this->taskProgressFormatter->format(array_slice($tasks, 0, 60)));
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode($state, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         exit;
@@ -216,11 +215,25 @@ final class HarnessController extends BaseController
         if (($cycle['action'] ?? '') !== 'queue_task' || !($cycle['task'] ?? null) instanceof \App\Domain\Entity\HarnessTask) return;
         try {
             $workers = $this->container->get(WorkerService::class);
-            if (!$workers->hasActiveHarnessTask((int)$cycle['task']->id)) $workers->enqueue('harness_task', ['task_id' => $cycle['task']->id]);
+            $workers->enqueue('harness_task', ['task_id' => $cycle['task']->id]);
+            $cycle['summary'] = 'Đã đưa ' . $cycle['task']->taskCode . ' vào hàng đợi Workers.';
         } catch (\Throwable $e) {
             $cycle['gate_passed'] = false;
             $cycle['summary'] = 'Không thể gửi task vào Workers: ' . $e->getMessage();
         }
+    }
+
+    /** @param array<string, mixed> $state @param \App\Domain\Entity\HarnessTask[] $tasks @return array<string, mixed> */
+    private function withTaskCounts(array $state, array $tasks): array
+    {
+        $state['tasks_executed'] = $state['tasks_succeeded'] = $state['tasks_failed'] = $state['tasks_rolled_back'] = 0;
+        foreach ($tasks as $task) {
+            if ($task->attempts > 0) $state['tasks_executed']++;
+            if (in_array($task->status->value, ['completed', 'ready_to_install'], true)) $state['tasks_succeeded']++;
+            elseif ($task->status->value === 'failed') $state['tasks_failed']++;
+            elseif ($task->status->value === 'rolled_back') $state['tasks_rolled_back']++;
+        }
+        return $state;
     }
 
 }

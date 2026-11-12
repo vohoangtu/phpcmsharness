@@ -10,6 +10,7 @@ interface WorkerJobQueuePort
 {
     /** @param array<string, mixed> $payload */
     public function enqueue(string $type, array $payload): int;
+    public function hasActiveHarnessTask(int $taskId): bool;
     public function claimNext(): ?WorkerJob;
     public function recoverRunning(): void;
     public function finish(int $id, string $status, ?string $result, ?string $error): void;

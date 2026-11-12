@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use App\Application\Service\TuzygentHarnessService;
+use App\Application\Service\WorkerService;
 use App\Infrastructure\Container\Container;
 
 $root = dirname(__DIR__);
@@ -21,7 +22,14 @@ if (is_file($autoload)) {
 }
 
 $config = require $root . '/config/app.php';
-$harness = (new Container($config))->get(TuzygentHarnessService::class);
+$container = new Container($config);
+$harness = $container->get(TuzygentHarnessService::class);
+$enqueueCycle = static function (array $cycle) use ($container): void {
+    if (($cycle['action'] ?? '') !== 'queue_task') return;
+    $task = $cycle['task'] ?? null;
+    if (!$task instanceof \App\Domain\Entity\HarnessTask) return;
+    $container->get(WorkerService::class)->enqueue('harness_task', ['task_id' => $task->id]);
+};
 $command = $argv[1] ?? '';
 
 if ($command === 'verify') {
@@ -49,7 +57,7 @@ if ($command === 'continuous') {
             $autoDiscover = true;
         }
     }
-    $harness->runContinuousLoop(0, $interval, $autoDiscover);
+    $harness->runContinuousLoop(0, $interval, $autoDiscover, $enqueueCycle);
     exit(0);
 }
 
@@ -66,7 +74,8 @@ if ($command === 'continuous:worker') {
     $harness->runContinuousLoop(
         (int) ($state['max_cycles'] ?? 0),
         (int) ($state['interval_seconds'] ?? 5),
-        (bool) ($state['auto_discover'] ?? true)
+        (bool) ($state['auto_discover'] ?? true),
+        $enqueueCycle
     );
     exit(0);
 }

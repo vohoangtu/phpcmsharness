@@ -23,6 +23,7 @@ $rangeEnd = min($currentPage * $pageSize, $totalItems);
         <h1 class="wp-page-title">🛒 Quản lý Đơn hàng (WooCommerce Orders)</h1>
         <p class="wp-page-subtitle">Theo dõi đơn đặt hàng, doanh thu và cập nhật tiến độ giao hàng.</p>
     </div>
+    <a class="wp-btn wp-btn-secondary" href="/admin/orders/cashbook">💵 Mở sổ thu chi</a>
 </div>
 
 <form method="get" action="/admin/orders" class="wp-card orders-search-form">

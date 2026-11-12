@@ -10,6 +10,7 @@ use App\Domain\Entity\Product;
 use App\Domain\Enum\OrderStatus;
 use App\Domain\Port\Outbound\CartPort;
 use App\Domain\Port\Outbound\OrderRepositoryPort;
+use App\Domain\Port\Outbound\OrderOperationsPort;
 use App\Domain\Port\Outbound\ProductRepositoryPort;
 use App\Domain\Port\Outbound\TransactionPort;
 use RuntimeException;
@@ -24,7 +25,8 @@ final readonly class OrderService
         private OrderRepositoryPort $orderRepository,
         private ProductRepositoryPort $productRepository,
         private CartPort $cart,
-        private TransactionPort $transaction
+        private TransactionPort $transaction,
+        private OrderOperationsPort $operations
     ) {
         $this->orderQueries = new OrderQueryService($orderRepository);
         $this->checkoutDataValidator = new CheckoutDataValidator();
@@ -144,14 +146,19 @@ final readonly class OrderService
         return $this->orderQueries->getOrderById($id);
     }
 
-    public function updateOrderStatus(int $id, OrderStatus $status): void
+    public function updateOrderStatus(int $id, OrderStatus $status, string $actor = 'system'): void
     {
         if ($status !== OrderStatus::CANCELLED) {
-            $order = $this->orderRepository->findById($id);
-            if ($order?->status === OrderStatus::CANCELLED) {
-                throw new RuntimeException('Không thể mở lại đơn hàng đã hủy vì tồn kho đã được hoàn trả.');
-            }
-            $this->orderRepository->updateStatus($id, $status);
+            $this->transaction->begin();
+            try {
+                $order = $this->orderRepository->findById($id);
+                if ($order === null) throw new RuntimeException('Không tìm thấy đơn hàng.');
+                if ($order->status === OrderStatus::CANCELLED) throw new RuntimeException('Không thể mở lại đơn hàng đã hủy vì tồn kho đã được hoàn trả.');
+                if ($order->status !== $status && !($order->status === OrderStatus::PENDING && $status === OrderStatus::PROCESSING) && !($order->status === OrderStatus::PROCESSING && $status === OrderStatus::COMPLETED)) throw new RuntimeException('Chuyển trạng thái theo trình tự chờ xử lý → đang giao hàng → hoàn thành.');
+                $this->orderRepository->updateStatus($id, $status);
+                if ($order->status !== $status) $this->operations->addActivity($id, $actor, 'Thay đổi trạng thái đơn', $order->status->label() . ' → ' . $status->label());
+                $this->transaction->commit();
+            } catch (Throwable $error) { $this->transaction->rollback(); throw $error; }
             return;
         }
 
@@ -166,10 +173,13 @@ final readonly class OrderService
                 return;
             }
 
+            if ($this->operations->netPaid($id) > 0) throw new RuntimeException('Phải hoàn toàn bộ tiền đã thu trước khi hủy đơn.');
+
             foreach ($order->items as $item) {
                 $this->productRepository->increaseStock($item->productId, $item->quantity);
             }
             $this->orderRepository->updateStatus($id, OrderStatus::CANCELLED);
+            $this->operations->addActivity($id, $actor, 'Hủy đơn', 'Đã hoàn tồn kho.');
             $this->transaction->commit();
         } catch (Throwable $error) {
             $this->transaction->rollback();

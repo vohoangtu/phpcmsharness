@@ -118,6 +118,10 @@ $isActive = fn(string $prefix): string => str_starts_with($currentUri, $prefix) 
                             <span class="wp-badge wp-badge-orange"><?= $pendingOrdersCount ?></span>
                         <?php endif; ?>
                     </a>
+                    <div class="wp-subnav">
+                        <a href="/admin/orders" class="<?= $currentUri === '/admin/orders' ? 'sub-active' : '' ?>">Tất cả đơn hàng</a>
+                        <a href="/admin/orders/cashbook" class="<?= $currentUri === '/admin/orders/cashbook' ? 'sub-active' : '' ?>">Sổ thu chi</a>
+                    </div>
                 <?php endif; ?>
 
                 <?php if (!empty($enabledModules['media'])): ?>

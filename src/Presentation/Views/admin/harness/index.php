@@ -13,7 +13,6 @@ $cEnabled = (bool) ($continuousState['enabled'] ?? false);
 $cDaemonAlive = (bool) ($continuousState['daemon_alive'] ?? false);
 $cInterval = (int) ($continuousState['interval_seconds'] ?? 5);
 $cAutoDiscover = (bool) ($continuousState['auto_discover'] ?? true);
-$cAutoHeal = (bool) ($continuousState['auto_heal_on_drift'] ?? true);
 $cEvents = is_array($continuousState['recent_events'] ?? null) ? $continuousState['recent_events'] : [];
 $cBadgeClass = $cEnabled ? 'badge-success' : 'badge-secondary';
 $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
@@ -59,6 +58,7 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
 
 <!-- 1. 3-STAGE VERIFICATION GATE STATUS -->
 <div class="wp-stats-grid">
+    <?php if (!$gateReport['gates']): ?><p class="wp-text-muted">Chạy kiểm định thủ công để xem kết quả hiện tại.</p><?php endif; ?>
     <?php foreach ($gateReport['gates'] as $gate): ?>
         <div class="wp-stat-card" style="border-left-color: <?= $gate['passed'] ? '#008a20' : '#d63638' ?>;">
             <div class="wp-stat-icon"><?= $gate['passed'] ? '✅' : '❌' ?></div>
@@ -97,7 +97,7 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
                         </select>
                     </div>
                     <div class="wp-form-group">
-                        <strong>Thống kê Vòng lặp Liên tục</strong>
+                        <strong>Chu kỳ và trạng thái task hiện tại</strong>
                         <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px 12px; font-size:13px;">
                             Chu kỳ: <strong id="stat-cycles"><?= (int) ($continuousState['cycles_completed'] ?? 0) ?></strong> •
                             Tasks: <strong id="stat-tasks"><?= (int) ($continuousState['tasks_executed'] ?? 0) ?></strong>
@@ -113,10 +113,7 @@ $cBadgeLabel = $cEnabled ? '🟢 RUNNING (CONTINUOUS)' : '⚪ STOPPED';
                         <input type="checkbox" name="auto_discover" id="continuous-autodiscover" value="1" <?= $cAutoDiscover ? 'checked' : '' ?>>
                         <span>🔭 <strong>Auto-Discover / Brainstorm</strong> (mặc định bật): Quét source để tạo backlog từ TODO/FIXME và các dấu hiệu cần cải thiện; API đã cấu hình sẽ triển khai đề tài.</span>
                     </label>
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                        <input type="checkbox" name="auto_heal_on_drift" value="1" <?= $cAutoHeal ? 'checked' : '' ?>>
-                        <span>🚑 <strong>Continuous Drift Auto-Heal</strong>: Tự động chạy 3-Stage Verification Gate mỗi chu kỳ và Rollback ngay nếu phát hiện lỗi cú pháp/kiến trúc.</span>
-                    </label>
+                    <p>🚑 Khi kiểm định giám sát thất bại, Continuous dừng và chờ quản trị viên kiểm tra snapshot.</p>
                     <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
                         <input type="checkbox" name="spawn_daemon" value="1" <?= $cDaemonAlive ? 'checked' : '' ?>>
                         <span>⚙️ <strong>Chạy ngầm Background Daemon</strong> để xử lý backlog liên tục.</span>

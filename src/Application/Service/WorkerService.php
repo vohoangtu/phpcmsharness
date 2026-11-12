@@ -33,18 +33,39 @@ final readonly class WorkerService
     public function listJobs(): array { return $this->queue->list(); }
     public function hasActiveHarnessTask(int $taskId): bool
     {
-        foreach ($this->queue->list(500) as $job) {
-            if ($job->type === 'harness_task' && (int)($job->payload['task_id'] ?? 0) === $taskId && in_array($job->status, ['queued', 'running'], true)) return true;
-        }
-        return false;
+        return $this->queue->hasActiveHarnessTask($taskId);
     }
-    public function retry(int $id): bool { $ok = $this->queue->retry($id); if ($ok) $this->startWorker(); return $ok; }
+    public function retry(int $id): bool { if (!$this->modules->isEnabled(ModuleKey::WORKERS)) throw new RuntimeException('Workers đang tắt; không thể retry job.'); $ok = $this->queue->retry($id); if ($ok) $this->startWorker(); return $ok; }
     public function cancel(int $id): bool { return $this->queue->cancel($id); }
+
+    /** @return array{active:bool,log_available:bool} */
+    public function status(): array
+    {
+        $path = $this->basePath . '/storage/workers';
+        $active = false;
+        if (is_file($path . '/worker.lock')) {
+            $lock = @fopen($path . '/worker.lock', 'r');
+            if ($lock !== false) {
+                $active = !flock($lock, LOCK_EX | LOCK_NB);
+                if (!$active) flock($lock, LOCK_UN);
+                fclose($lock);
+            }
+        }
+        return ['active' => $active, 'log_available' => is_file($path . '/worker.log')];
+    }
 
     public function run(string $token): int
     {
         $expected = is_file($this->tokenPath()) ? trim((string)file_get_contents($this->tokenPath())) : '';
         if ($expected === '' || !hash_equals($expected, $token)) return 3;
+        $lock = fopen($this->basePath . '/storage/workers/worker.lock', 'c');
+        if ($lock === false || !flock($lock, LOCK_EX)) { if (is_resource($lock)) fclose($lock); return 1; }
+        try { return $this->runLocked(); }
+        finally { flock($lock, LOCK_UN); fclose($lock); }
+    }
+
+    private function runLocked(): int
+    {
         $this->queue->recoverRunning();
         $idleChecks = 0;
         while (true) {
@@ -60,8 +81,8 @@ final readonly class WorkerService
                 if ($job->type !== 'harness_task') throw new RuntimeException('Không có handler cho loại job này.');
                 $task = $this->harness->executeTask((int)($job->payload['task_id'] ?? 0));
                 $result = json_encode(['task_id'=>$task->id,'task_code'=>$task->taskCode,'status'=>$task->status->value,'attempts'=>$task->attempts,'snapshot_id'=>$task->snapshotId,'files_changed'=>$task->filesChanged,'verification_output'=>$task->verificationOutput], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
-                // Business rollback is a completed worker execution; its result describes the Harness failure.
-                $this->queue->finish((int)$job->id, 'completed', $result, null);
+                $failed = in_array($task->status->value, ['failed', 'rolled_back'], true);
+                $this->queue->finish((int)$job->id, $failed ? 'failed' : 'completed', $result, $failed ? $task->verificationOutput : null);
             } catch (\Throwable $e) {
                 $this->queue->finish((int)$job->id, 'failed', null, $e->getMessage());
             }
@@ -84,12 +105,15 @@ final readonly class WorkerService
                 @chmod($tokenPath, 0600);
             }
         }
-        $php = escapeshellarg(PHP_BINARY ?: 'php');
+        $cli = PHP_BINDIR . '/php';
+        $php = escapeshellarg(is_executable($cli) ? $cli : 'php');
         $script = escapeshellarg($this->basePath . '/bin/worker.php');
-        $token = escapeshellarg(trim((string)file_get_contents($tokenPath)));
-        $lockPath = escapeshellarg($path . '/worker.lock');
+        if (!is_file($tokenPath) || trim((string) file_get_contents($tokenPath)) === '') throw new RuntimeException('Không thể tạo token Workers.');
+        $tokenFile = escapeshellarg($tokenPath);
+        if (is_file($path . '/worker.log') && filesize($path . '/worker.log') > 1048576) @rename($path . '/worker.log', $path . '/worker.log.1');
+        $logFile = escapeshellarg($path . '/worker.log');
         // The lock keeps concurrency at one even when several requests launch the CLI simultaneously.
-        $command = "$php $script $token $lockPath >/dev/null 2>&1 &";
+        $command = "$php $script < $tokenFile >> $logFile 2>&1 &";
         exec($command);
     }
 

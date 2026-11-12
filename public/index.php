@@ -193,8 +193,12 @@ $router->post('/admin/media/delete/{id}', [$mediaCtrl, 'delete'], ModuleKey::MED
 
 // Orders Management
 $router->get('/admin/orders', [$orderCtrl, 'index'], ModuleKey::ORDERS, true);
+$router->get('/admin/orders/cashbook', [$orderCtrl, 'cashbook'], ModuleKey::ORDERS, true);
 $router->get('/admin/orders/{id}', [$orderCtrl, 'detail'], ModuleKey::ORDERS, true);
 $router->post('/admin/orders/status/{id}', [$orderCtrl, 'updateStatus'], ModuleKey::ORDERS, true);
+$router->post('/admin/orders/operations/{id}', [$orderCtrl, 'operation'], ModuleKey::ORDERS, true);
+$router->get('/admin/orders/print/{id}', [$orderCtrl, 'printOrder'], ModuleKey::ORDERS, true);
+$router->get('/admin/orders/payment-document/{id}', [$orderCtrl, 'printPaymentDocument'], ModuleKey::ORDERS, true);
 
 // Comments & Reviews Management
 $router->get('/admin/comments', [$commentCtrl, 'index'], ModuleKey::COMMENTS, true);

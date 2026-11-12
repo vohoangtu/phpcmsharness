@@ -58,9 +58,81 @@ final class DatabaseManager
                 $this->ensureModulesSeeded($this->pdo);
             }
             $this->ensureMediaDimensions($this->pdo);
+            $this->ensureOrderOperations($this->pdo);
         }
 
         return $this->pdo;
+    }
+
+    /** Create the operational records without altering historical order totals. */
+    private function ensureOrderOperations(PDO $pdo): void
+    {
+        // This method runs whenever a connection is created. Avoid taking a
+        // write lock on every request once the schema is already current.
+        $requiredObjects = [
+            'order_payment_transactions',
+            'idx_order_payment_order',
+            'order_shipments',
+            'order_invoice_requests',
+            'order_activity',
+            'idx_order_activity_order',
+            'order_adjustments',
+        ];
+        $placeholders = implode(',', array_fill(0, count($requiredObjects), '?'));
+        $schemaCheck = $pdo->prepare("SELECT name FROM sqlite_master WHERE name IN ($placeholders)");
+        $schemaCheck->execute($requiredObjects);
+        $existingObjects = $schemaCheck->fetchAll(PDO::FETCH_COLUMN);
+        $shipmentColumns = [];
+        if (in_array('order_shipments', $existingObjects, true)) {
+            $shipmentColumns = array_column($pdo->query('PRAGMA table_info(order_shipments)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+        }
+        if (count($existingObjects) === count($requiredObjects) && in_array('tracking_url', $shipmentColumns, true)) {
+            return;
+        }
+
+        $pdo->exec('BEGIN IMMEDIATE');
+        try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS order_payment_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('payment','refund')), amount_vnd INTEGER NOT NULL CHECK(amount_vnd > 0),
+            method TEXT NOT NULL, reference TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
+            occurred_at TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL,
+            FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+        )");
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_order_payment_order ON order_payment_transactions(order_id, id)');
+        $pdo->exec("CREATE TABLE IF NOT EXISTS order_shipments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, carrier TEXT NOT NULL DEFAULT '',
+            tracking_code TEXT NOT NULL DEFAULT '', shipping_fee_vnd INTEGER NOT NULL DEFAULT 0 CHECK(shipping_fee_vnd >= 0),
+            status TEXT NOT NULL DEFAULT 'pending', expected_at TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+        )");
+        $shipmentColumns = $pdo->query('PRAGMA table_info(order_shipments)')->fetchAll(PDO::FETCH_ASSOC);
+        if (!in_array('tracking_url', array_column($shipmentColumns, 'name'), true)) {
+            $pdo->exec("ALTER TABLE order_shipments ADD COLUMN tracking_url TEXT NOT NULL DEFAULT ''");
+        }
+        $pdo->exec("CREATE TABLE IF NOT EXISTS order_invoice_requests (
+            order_id INTEGER PRIMARY KEY, buyer_name TEXT NOT NULL DEFAULT '', tax_code TEXT NOT NULL DEFAULT '',
+            address TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'not_requested',
+            reference TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL,
+            FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+        )");
+        $pdo->exec("CREATE TABLE IF NOT EXISTS order_activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, actor TEXT NOT NULL,
+            event TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+            FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+        )");
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_order_activity_order ON order_activity(order_id, id)');
+        $pdo->exec("CREATE TABLE IF NOT EXISTS order_adjustments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, amount_vnd INTEGER NOT NULL CHECK(amount_vnd != 0),
+            reason TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL,
+            FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+        )");
+            $pdo->commit();
+        } catch (\Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $error;
+        }
     }
 
     private function migrateAndSeed(PDO $pdo): void

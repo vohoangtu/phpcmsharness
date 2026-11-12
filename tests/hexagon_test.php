@@ -5317,10 +5317,10 @@ $mainAreaMarkup = preg_match('~<main\b[^>]*>(.*?)</main>~is', $orderDetailPageMa
     : '';
 preg_match_all('~<h([1-6])\b~i', $mainAreaMarkup, $orderHeadingMatches);
 assertTrue(
-    array_map('intval', $orderHeadingMatches[1]) === [1, 2, 2, 3]
-        && str_contains($mainAreaMarkup, '<h2>📦 Danh sách sản phẩm trong đơn</h2>')
-        && str_contains($mainAreaMarkup, '<h2>📍 Thông tin giao hàng của khách</h2>')
-        && str_contains($mainAreaMarkup, '<h3>⚙️ Cập nhật Trạng thái Đơn</h3>'),
+    array_map('intval', $orderHeadingMatches[1]) === [1, 2, 2, 2, 2, 2, 2, 2, 3]
+        && str_contains($mainAreaMarkup, '<h2>📦 Sản phẩm</h2>')
+        && str_contains($mainAreaMarkup, '<h2>📍 Giao hàng tới</h2>')
+        && str_contains($mainAreaMarkup, '<h3>⚙️ Trạng thái đơn</h3>'),
     'Rendered order detail page uses h2 for content subsections and retains the fixed sidebar heading rank'
 );
 
@@ -5436,9 +5436,9 @@ assertTrue(
         && $formattedHarnessTasks[12]['summary'] === 'Checked behavior'
         && $formattedHarnessTasks[12]['files_changed'] === ['src/One.php', 'src/Two.php']
         && $formattedHarnessTasks[12]['status_label'] === 'Đang chạy Loop'
-        && $formattedHarnessTasks[13]['summary'] === 'Hoàn tất; đã cập nhật 1 tệp và vượt qua 3/3 cổng kiểm định.'
+        && $formattedHarnessTasks[13]['summary'] === 'Self-audit hoàn tất; 3/3 cổng kiểm định đạt.'
         && $formattedHarnessTasks[14]['summary'] === 'Không hoàn tất sau 3 lần thử; source đã được khôi phục về snapshot.'
-        && $formattedHarnessTasks[15]['summary'] === 'Tác vụ chưa hoàn tất.',
+        && $formattedHarnessTasks[15]['summary'] === 'Không tạo được gói cập nhật; website được giữ nguyên.',
     'Harness task progress formatter preserves keyed task data and summaries for all task states, including latest log progress and unknown-state fallback'
 );
 $runningTaskWithoutProgress = new HarnessTask(

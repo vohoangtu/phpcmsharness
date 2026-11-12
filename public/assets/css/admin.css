@@ -823,6 +823,10 @@ input:checked + .wp-slider:before {
     }
 }
 
+body.wp-admin-body .order-operations-form label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+body.wp-admin-body .order-operations-form .wp-grid-2 { gap: 14px; margin: 12px 0; }
+body.wp-admin-body .order-operations-form .wp-input, body.wp-admin-body .order-operations-form .wp-select { width: 100%; min-width: 0; }
+body.wp-admin-body .order-operations-form > label { margin: 12px 0; }
 @media (max-width: 700px) {
     .wp-topbar {
         align-items: flex-start;
@@ -919,6 +923,134 @@ input:checked + .wp-slider:before {
     .wp-btn, .wp-btn-sm {
         min-height: 38px;
     }
+}
+
+/* Order detail: clear hierarchy, balanced two-column workspace, compact mobile flow. */
+body.wp-admin-body .order-page-header { align-items: flex-end; gap: 20px; margin-bottom: 18px; }
+body.wp-admin-body .order-page-heading { min-width: 0; }
+body.wp-admin-body .order-page-heading .wp-page-title { margin: 4px 0 3px; overflow-wrap: anywhere; }
+body.wp-admin-body .order-eyebrow,.order-section-kicker { display: block; margin: 0 0 5px; color: #8a94af; font-size: 10px; font-weight: 800; letter-spacing: .09em; }
+body.wp-admin-body .order-eyebrow span { padding: 0 5px; color: #c0c7d8; }
+body.wp-admin-body .order-code { color: #5964d9; }
+body.wp-admin-body .order-header-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 8px; }
+body.wp-admin-body .order-overview { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)) minmax(190px,1.1fr); gap: 0; margin: 0 0 20px; overflow: hidden; border: 1px solid rgba(135,148,184,.18); border-radius: 16px; background: rgba(255,255,255,.82); box-shadow: 0 8px 24px rgba(53,65,112,.045); }
+body.wp-admin-body .order-overview-item,.order-overview-total { display: grid; align-content: center; gap: 5px; min-width: 0; padding: 16px 19px; border-right: 1px solid rgba(135,148,184,.15); }
+body.wp-admin-body .order-overview-item > span,.order-overview-total > span,.order-finance-strip span { color: #8490ac; font-size: 10px; font-weight: 700; }
+body.wp-admin-body .order-overview-item strong { display: flex; align-items: center; gap: 7px; color: #303956; font-size: 13px; }
+body.wp-admin-body .order-overview-item small,.order-overview-total small { color: #8993ad; font-size: 10px; }
+body.wp-admin-body .order-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #f1aa46; box-shadow: 0 0 0 3px #fff2db; }
+body.wp-admin-body .order-overview-total { border-right: 0; background: linear-gradient(135deg,#f5f3ff,#f3f6ff); }
+body.wp-admin-body .order-overview-total strong { color: #5144d0; font-size: 21px; line-height: 1.2; }
+body.wp-admin-body .order-detail-layout { align-items: start; grid-template-columns: minmax(0,1fr) minmax(250px,310px); gap: 18px; }
+body.wp-admin-body .order-detail-layout .wp-editor-main,.order-detail-layout .wp-editor-sidebar { min-width: 0; }
+body.wp-admin-body .order-detail-sidebar { position: sticky; top: 18px; display: grid; gap: 14px; }
+body.wp-admin-body .order-detail-sidebar .wp-card { margin: 0; }
+body.wp-admin-body .order-section-card { padding: 19px; }
+body.wp-admin-body .order-section-card .wp-card-header { align-items: center; margin-bottom: 14px; }
+body.wp-admin-body .order-section-card .wp-card-header h2 { margin: 0; color: #303956; font-size: 16px; }
+body.wp-admin-body .order-section-kicker { margin-bottom: 4px; font-size: 9px; }
+body.wp-admin-body .order-count-badge { display: inline-flex; align-items: center; min-height: 25px; padding: 4px 9px; border: 1px solid rgba(135,148,184,.15); border-radius: 999px; color: #727d9b; background: #f8f9fd; font-size: 10px; font-weight: 700; white-space: nowrap; }
+body.wp-admin-body .order-total-note { margin: 12px 0 0; font-size: 10px; line-height: 1.6; }
+body.wp-admin-body .order-total-note span { padding: 0 3px; color: #b1b9cb; }
+body.wp-admin-body .order-finance-strip { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 0 0 14px; }
+body.wp-admin-body .order-finance-strip > div { display: grid; gap: 5px; min-width: 0; padding: 11px 12px; border: 1px solid rgba(135,148,184,.13); border-radius: 11px; background: #fafbfe; }
+body.wp-admin-body .order-finance-strip strong { color: #303956; font-size: 13px; overflow-wrap: anywhere; }
+body.wp-admin-body .order-record-list { display: grid; margin: 10px 0 14px; }
+body.wp-admin-body .order-record { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 11px 2px; border-bottom: 1px solid rgba(135,148,184,.13); }
+body.wp-admin-body .order-record-icon { display: grid; flex: 0 0 29px; width: 29px; height: 29px; place-items: center; border-radius: 9px; color: #188d68; background: #e7f8f1; font-size: 15px; font-weight: 800; }
+body.wp-admin-body .order-record-icon.is-refund { color: #c45868; background: #fff0f1; }
+body.wp-admin-body .order-record-body { display: grid; flex: 1; gap: 3px; min-width: 0; }
+body.wp-admin-body .order-record-body strong { color: #3c4662; font-size: 11px; }
+body.wp-admin-body .order-record-body small { color: #8993ad; font-size: 9px; overflow-wrap: anywhere; }
+body.wp-admin-body .order-record-amount { color: #188d68; font-size: 11px; white-space: nowrap; }
+body.wp-admin-body .order-record-amount.is-refund { color: #c45868; }
+body.wp-admin-body .order-timeline { display: grid; }
+body.wp-admin-body .order-timeline-item { position: relative; display: flex; gap: 11px; padding: 0 0 15px; }
+body.wp-admin-body .order-timeline-item:not(:last-child)::before { position: absolute; top: 12px; bottom: 0; left: 4px; width: 1px; background: #e5e8f2; content: ""; }
+body.wp-admin-body .order-timeline-item > i { z-index: 1; flex: 0 0 9px; width: 9px; height: 9px; margin-top: 3px; border: 2px solid #fff; border-radius: 50%; background: #7062e7; box-shadow: 0 0 0 1px #7062e7; }
+body.wp-admin-body .order-timeline-item > div { min-width: 0; }
+body.wp-admin-body .order-timeline-item strong { color: #3c4662; font-size: 11px; }
+body.wp-admin-body .order-timeline-item p { margin: 3px 0; color: #6f7a96; font-size: 10px; overflow-wrap: anywhere; }
+body.wp-admin-body .order-timeline-item small { color: #8993ad; font-size: 9px; }
+body.wp-admin-body .order-customer-name { display: block; margin-bottom: 9px; color: #303956; font-size: 14px; }
+body.wp-admin-body .order-customer-card > a { display: block; margin: 5px 0; color: #5954cb; font-size: 11px; overflow-wrap: anywhere; }
+body.wp-admin-body .order-customer-card > p { margin: 12px 0 0; color: #505a76; font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+body.wp-admin-body .order-customer-note { margin-top: 12px; padding: 10px; border-radius: 10px; color: #67728f; background: #f6f7fb; font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+body.wp-admin-body .order-status-card .wp-card-header { margin-bottom: 13px; }
+body.wp-admin-body .order-status-card { order: 1; }
+body.wp-admin-body .order-customer-card { order: 2; }
+body.wp-admin-body .order-status-card .wp-card-header h3,.order-customer-card .wp-card-header h3 { margin: 0; color: #303956; font-size: 14px; }
+body.wp-admin-body .order-shipment-form { margin: 12px 0; padding: 15px; border: 1px solid rgba(135,148,184,.17); border-radius: 12px; background: #fcfcff; }
+body.wp-admin-body .order-section-card .wp-form-group { gap: 12px; }
+body.wp-admin-body .order-form-disclosure { margin: 12px 0 0; border: 1px solid rgba(135,148,184,.17); border-radius: 11px; background: #fbfbfe; }
+body.wp-admin-body .order-form-disclosure > summary { padding: 11px 13px; color: #5954cb; font-size: 11px; font-weight: 750; cursor: pointer; }
+body.wp-admin-body .order-form-disclosure[open] > summary { border-bottom: 1px solid rgba(135,148,184,.14); }
+body.wp-admin-body .order-form-disclosure > form { padding: 13px; }
+@media (max-width: 920px) {
+    body.wp-admin-body .order-detail-layout { grid-template-columns: minmax(0,1fr) 260px; gap: 13px; }
+    body.wp-admin-body .order-overview-item,.order-overview-total { padding: 13px; }
+}
+@media (max-width: 760px) {
+    body.wp-admin-body .order-page-header { align-items: stretch; }
+    body.wp-admin-body .order-header-actions { width: 100%; }
+    body.wp-admin-body .order-header-actions .wp-btn { flex: 1; }
+    body.wp-admin-body .order-overview { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    body.wp-admin-body .order-overview-item:nth-child(2) { border-right: 0; }
+    body.wp-admin-body .order-overview-item:nth-child(-n+2) { border-bottom: 1px solid rgba(135,148,184,.15); }
+    body.wp-admin-body .order-overview-total { border-top: 1px solid rgba(135,148,184,.15); }
+    body.wp-admin-body .order-detail-layout { grid-template-columns: minmax(0,1fr); }
+    body.wp-admin-body .order-detail-sidebar { position: static; grid-row: 1; }
+}
+@media (max-width: 520px) {
+    body.wp-admin-body .order-overview-item,.order-overview-total { padding: 11px; }
+    body.wp-admin-body .order-overview-item strong { font-size: 11px; }
+    body.wp-admin-body .order-overview-total strong { font-size: 17px; }
+    body.wp-admin-body .order-section-card { padding: 14px; }
+    body.wp-admin-body .order-finance-strip { gap: 5px; }
+    body.wp-admin-body .order-finance-strip > div { padding: 8px; }
+    body.wp-admin-body .order-finance-strip strong { font-size: 11px; }
+    body.wp-admin-body .order-section-card .wp-card-header { align-items: flex-start; }
+}
+body.wp-admin-body .cashbook-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 13px; margin: 0 0 18px; }
+body.wp-admin-body .cashbook-summary article { display: grid; gap: 6px; min-width: 0; padding: 17px 19px; border: 1px solid rgba(135,148,184,.17); border-radius: 15px; background: rgba(255,255,255,.86); box-shadow: 0 8px 24px rgba(53,65,112,.04); }
+body.wp-admin-body .cashbook-summary article > span { color: #7c87a3; font-size: 11px; font-weight: 700; }
+body.wp-admin-body .cashbook-summary article > strong { color: #188d68; font-size: 22px; }
+body.wp-admin-body .cashbook-summary article:nth-child(2) > strong { color: #cb586e; }
+body.wp-admin-body .cashbook-summary article > small { color: #929bb0; font-size: 10px; }
+body.wp-admin-body .cashbook-summary .cashbook-net { background: linear-gradient(135deg,#f4f2ff,#f2f6ff); }
+body.wp-admin-body .cashbook-summary .cashbook-net > strong { color: #574bd2; }
+body.wp-admin-body .cashbook-tabs { margin-bottom: 12px; }
+body.wp-admin-body .cashbook-filter { display: grid; grid-template-columns: minmax(220px,1.6fr) repeat(2,minmax(140px,.8fr)) auto auto; align-items: end; gap: 10px; padding: 15px; }
+body.wp-admin-body .cashbook-filter label { display: grid; gap: 5px; color: #68728f; font-size: 10px; font-weight: 700; }
+body.wp-admin-body .cashbook-filter .wp-input { width: 100%; min-width: 0; }
+body.wp-admin-body .cashbook-table-card { overflow: hidden; padding: 0; }
+body.wp-admin-body .cashbook-table-wrap { width: 100%; overflow-x: auto; }
+body.wp-admin-body .cashbook-table { min-width: 850px; margin: 0; }
+body.wp-admin-body .cashbook-table th { white-space: nowrap; }
+body.wp-admin-body .cashbook-table td { vertical-align: middle; }
+body.wp-admin-body .cashbook-table td small { display: block; margin-top: 3px; color: #8993ad; font-size: 9px; }
+body.wp-admin-body .cashbook-table .numeric { text-align: right; white-space: nowrap; }
+body.wp-admin-body .cashbook-kind { display: inline-flex; padding: 4px 7px; border-radius: 999px; font-size: 8px; font-weight: 800; letter-spacing: .04em; }
+body.wp-admin-body .cashbook-kind.is-receipt { color: #137c5b; background: #e5f8f0; }
+body.wp-admin-body .cashbook-kind.is-expense { color: #b4455b; background: #fff0f2; }
+body.wp-admin-body .cashbook-code { display: block; margin-top: 5px; color: #39435f; font-size: 10px; white-space: nowrap; }
+body.wp-admin-body .cashbook-table .text-positive { color: #188d68; }
+body.wp-admin-body .cashbook-table .text-negative { color: #cb586e; }
+body.wp-admin-body .cashbook-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 15px; }
+body.wp-admin-body .cashbook-pagination > div { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 900px) { body.wp-admin-body .cashbook-filter { grid-template-columns: repeat(2,minmax(0,1fr)); } body.wp-admin-body .cashbook-filter label:first-of-type { grid-column: 1 / -1; } }
+@media (max-width: 560px) {
+    body.wp-admin-body .cashbook-header { align-items: stretch; }
+    body.wp-admin-body .cashbook-summary { gap: 7px; }
+    body.wp-admin-body .cashbook-summary article { padding: 11px 9px; }
+    body.wp-admin-body .cashbook-summary article > strong { font-size: 14px; overflow-wrap: anywhere; }
+    body.wp-admin-body .cashbook-summary article > span { font-size: 9px; }
+    body.wp-admin-body .cashbook-summary article > small { font-size: 8px; }
+    body.wp-admin-body .cashbook-filter { grid-template-columns: minmax(0,1fr); }
+    body.wp-admin-body .cashbook-filter label:first-of-type { grid-column: auto; }
+    body.wp-admin-body .cashbook-filter .wp-btn { width: 100%; }
+    body.wp-admin-body .cashbook-pagination { align-items: flex-start; flex-direction: column; }
+    body.wp-admin-body .cashbook-pagination > div { width: 100%; justify-content: space-between; }
 }
 
 /* Media Library management page */
@@ -4401,4 +4533,13 @@ body.wp-admin-body .media-metadata-form .wp-btn { min-height: 31px; justify-self
     .media-edit-layout { grid-template-columns: minmax(0,1fr); }
     .media-edit-canvas-wrap { min-height: 220px; }
     .media-edit-controls { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 700px) {
+    body.wp-admin-body .order-detail-table, body.wp-admin-body .order-detail-table tbody, body.wp-admin-body .order-detail-table tfoot { display: block; width: 100%; }
+    body.wp-admin-body .order-detail-table thead { display: none; }
+    body.wp-admin-body .order-detail-table tbody tr { display: block; padding: 10px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 12px; }
+    body.wp-admin-body .order-detail-table tbody td { display: flex; justify-content: space-between; gap: 12px; text-align: right; border: 0; padding: 6px; overflow-wrap: anywhere; white-space: normal; }
+    body.wp-admin-body .order-detail-table tbody td::before { content: attr(data-label); color: #74819f; font-weight: 600; text-align: left; flex-shrink: 0; }
+    body.wp-admin-body .order-detail-table tfoot tr { display: flex; flex-wrap: wrap; justify-content: space-between; }
+    body.wp-admin-body .order-detail-table tfoot th { display: block; padding: 8px; }
 }

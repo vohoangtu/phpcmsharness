@@ -190,8 +190,24 @@ final readonly class TuzygentHarnessService
      *
      * @return array{passed: bool, gates: array<string, array{passed: bool, title: string, details: string}>, summary: string}
      */
-    public function runVerificationGate(): array
+    public function runVerificationGate(bool $inStaging = false): array
     {
+        if (!$inStaging) {
+            $lock = fopen($this->harnessDir . '/update-install.lock', 'c');
+            if ($lock === false || !flock($lock, LOCK_SH | LOCK_NB)) {
+                if (is_resource($lock)) fclose($lock);
+                throw new RuntimeException('Không thể kiểm định khi task hoặc bản cập nhật đang chạy.');
+            }
+            $stagePath = '';
+            try {
+                $stagePath = $this->createStagingWorkspace(0);
+                return (new self($this->harnessRepository, $stagePath))->runVerificationGate(true);
+            } finally {
+                if ($stagePath !== '') $this->removeStagingWorkspace($stagePath);
+                flock($lock, LOCK_UN);
+                fclose($lock);
+            }
+        }
         $gates = [];
 
         // GATE 1: PHP 8.5 Syntax Lint (In-process TOKEN_PARSE AST validation)
@@ -248,11 +264,36 @@ final readonly class TuzygentHarnessService
         ];
 
         // GATE 3: Integration & Regression Tests
-        $phpBin = defined('PHP_BINARY') && PHP_BINARY !== '' ? PHP_BINARY : 'php';
+        $phpBin = is_executable(PHP_BINDIR . '/php') ? PHP_BINDIR . '/php' : 'php';
         $testFile = $this->basePath . '/tests/hexagon_test.php';
         $testOut = [];
         $testCode = 0;
         exec(sprintf('%s %s 2>&1', escapeshellarg($phpBin), escapeshellarg($testFile)), $testOut, $testCode);
+        $workerTestOut = [];
+        $workerTestCode = 0;
+        exec(sprintf('%s %s 2>&1', escapeshellarg($phpBin), escapeshellarg($this->basePath . '/tests/worker_queue_test.php')), $workerTestOut, $workerTestCode);
+        $testOut = array_merge($testOut, $workerTestOut);
+        if ($workerTestCode !== 0) $testCode = $workerTestCode;
+        $snapshotTestOut = [];
+        $snapshotTestCode = 0;
+        exec(sprintf('%s %s 2>&1', escapeshellarg($phpBin), escapeshellarg($this->basePath . '/tests/harness_snapshot_test.php')), $snapshotTestOut, $snapshotTestCode);
+        $testOut = array_merge($testOut, $snapshotTestOut);
+        if ($snapshotTestCode !== 0) $testCode = $snapshotTestCode;
+        $updateTestOut = [];
+        $updateTestCode = 0;
+        exec(sprintf('%s %s 2>&1', escapeshellarg($phpBin), escapeshellarg($this->basePath . '/tests/harness_update_test.php')), $updateTestOut, $updateTestCode);
+        $testOut = array_merge($testOut, $updateTestOut);
+        if ($updateTestCode !== 0) $testCode = $updateTestCode;
+        $concurrencyTestOut = [];
+        $concurrencyTestCode = 0;
+        exec(sprintf('%s %s 2>&1', escapeshellarg($phpBin), escapeshellarg($this->basePath . '/tests/worker_concurrency_test.php')), $concurrencyTestOut, $concurrencyTestCode);
+        $testOut = array_merge($testOut, $concurrencyTestOut);
+        if ($concurrencyTestCode !== 0) $testCode = $concurrencyTestCode;
+        $orderTestOut = [];
+        $orderTestCode = 0;
+        exec(sprintf('%s %s 2>&1', escapeshellarg($phpBin), escapeshellarg($this->basePath . '/tests/order_operations_test.php')), $orderTestOut, $orderTestCode);
+        $testOut = array_merge($testOut, $orderTestOut);
+        if ($orderTestCode !== 0) $testCode = $orderTestCode;
         $gate3Passed = ($testCode === 0);
         $gates['integration_tests'] = [
             'passed' => $gate3Passed,
@@ -281,7 +322,7 @@ final readonly class TuzygentHarnessService
     public function executeTask(int $taskId): HarnessTask
     {
         $lock = fopen($this->harnessDir . '/update-install.lock', 'c');
-        if ($lock === false || !flock($lock, LOCK_SH | LOCK_NB)) {
+        if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
             if (is_resource($lock)) fclose($lock);
             throw new RuntimeException('Một bản cập nhật website đang được cài đặt; task sẽ được Workers thử lại sau.');
         }
@@ -368,7 +409,7 @@ final readonly class TuzygentHarnessService
 
             $logs[] = sprintf('[%s] 🧪 Chạy 3-Stage Gate trên staging; website đang chạy chưa bị thay đổi.', date('H:i:s'));
             try {
-                $lastGateResult = $stagedHarness->runVerificationGate();
+                $lastGateResult = $stagedHarness->runVerificationGate(true);
             } catch (\Throwable $e) {
                 $lastFailure = 'Không thể chạy Gate trên staging: ' . $e->getMessage();
                 $logs[] = sprintf('[%s] ❌ %s', date('H:i:s'), $lastFailure);
@@ -545,7 +586,7 @@ final readonly class TuzygentHarnessService
             $status = $restored ? HarnessTaskStatus::ROLLED_BACK : HarnessTaskStatus::FAILED;
             $verificationOutput = $e->getMessage();
         } finally {
-            if ($maintenanceStarted) @unlink($this->basePath . '/storage/update-maintenance.json');
+            if ($maintenanceStarted && ($status ?? HarnessTaskStatus::FAILED) !== HarnessTaskStatus::FAILED) @unlink($this->basePath . '/storage/update-maintenance.json');
             flock($lock, LOCK_UN);
             fclose($lock);
         }
@@ -579,6 +620,13 @@ final readonly class TuzygentHarnessService
             foreach (['storage', '.harness'] as $directory) {
                 if (!is_dir($stage . '/' . $directory)) mkdir($stage . '/' . $directory, 0770, true);
             }
+            $stageConfig = require $this->basePath . '/config/app.php';
+            if (!is_array($stageConfig)) throw new RuntimeException('Cấu hình staging không hợp lệ.');
+            $stageConfig['base_path'] = $stage;
+            $stageConfig['storage_path'] = $stage . '/storage';
+            $stageConfig['uploads_path'] = $stage . '/public/uploads';
+            $stageConfig['db'] = ['driver' => 'sqlite', 'sqlite_path' => $stage . '/storage/database.sqlite'];
+            if (file_put_contents($stage . '/config/app.php', "<?php\nreturn " . var_export($stageConfig, true) . ";\n", LOCK_EX) === false) throw new RuntimeException('Không thể cô lập cấu hình database staging.');
         } catch (\Throwable $e) {
             $this->removeStagingWorkspace($stage);
             throw $e;
@@ -603,6 +651,7 @@ final readonly class TuzygentHarnessService
         $iterator = new RecursiveDirectoryIterator($source, RecursiveDirectoryIterator::SKIP_DOTS);
         foreach ($iterator as $entry) {
             if ($entry->isLink()) continue;
+            if ($entry->getPathname() === $this->basePath . '/public/uploads') continue;
             $target = $destination . '/' . $entry->getFilename();
             if ($entry->isDir()) $this->copyDirectory($entry->getPathname(), $target);
             elseif ($entry->isFile() && !copy($entry->getPathname(), $target)) {
@@ -707,10 +756,18 @@ final readonly class TuzygentHarnessService
             $this->assertInstallablePath($relativePath);
             if (is_file($this->basePath . '/' . $relativePath)) $errors[] = "Tệp cũ vẫn còn sau cài đặt: {$relativePath}";
         }
+        if ($errors === []) {
+            $php = is_executable(PHP_BINDIR . '/php') ? PHP_BINDIR . '/php' : 'php';
+            $bootstrap = '$root = $argv[1]; require $root . "/vendor/autoload.php"; $config = require $root . "/config/app.php"; if (!is_array($config) || !class_exists("App\\Infrastructure\\Container\\Container") || !class_exists("App\\Presentation\\Http\\Router")) exit(1);';
+            try {
+                [$code, $output] = $this->runProcess([$php, '-r', $bootstrap, $this->basePath], 30);
+                if ($code !== 0) $errors[] = 'Bootstrap health check thất bại: ' . trim($output);
+            } catch (\Throwable $e) { $errors[] = 'Không thể kiểm tra bootstrap: ' . $e->getMessage(); }
+        }
         return [
             'passed' => $errors === [],
             'summary' => $errors === []
-                ? '✅ Cài đặt integrity check đạt: checksum khớp và các tệp PHP hợp lệ.'
+                ? '✅ Cài đặt integrity check đạt: checksum, cú pháp PHP và bootstrap hợp lệ.'
                 : implode("\n", $errors),
         ];
     }
@@ -721,6 +778,7 @@ final readonly class TuzygentHarnessService
         if ($normalized !== $relativePath || str_starts_with($normalized, '/')
             || preg_match('~(^|/)\.\.(/|$)~', $normalized)
             || $normalized === 'config/app.php'
+            || str_starts_with($normalized, 'public/uploads/')
             || preg_match('~^(config|src|public|tests)/.+~', $normalized) !== 1) {
             throw new RuntimeException("Đường dẫn ngoài phạm vi gói cập nhật: {$relativePath}");
         }
@@ -801,6 +859,7 @@ final readonly class TuzygentHarnessService
             'created_at' => date('Y-m-d H:i:s'),
             'file_scope' => 'project-source-v1',
             'files' => [],
+            'checksums' => [],
         ];
 
         foreach ($files as $absPath) {
@@ -809,11 +868,12 @@ final readonly class TuzygentHarnessService
             if (!is_dir(dirname($destPath))) {
                 mkdir(dirname($destPath), 0775, true);
             }
-            copy($absPath, $destPath);
+            if (!copy($absPath, $destPath)) throw new RuntimeException("Không thể sao lưu {$relPath}.");
             $manifest['files'][] = $relPath;
+            $manifest['checksums'][$relPath] = hash_file('sha256', $destPath) ?: throw new RuntimeException("Không thể kiểm tra snapshot {$relPath}.");
         }
 
-        file_put_contents($targetDir . '/manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        if (file_put_contents($targetDir . '/manifest.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)) === false) throw new RuntimeException('Không thể ghi manifest snapshot.');
 
         return $snapshotId;
     }
@@ -835,6 +895,14 @@ final readonly class TuzygentHarnessService
             return false;
         }
 
+        foreach ($manifest['files'] as $relPath) {
+            if (!is_string($relPath) || str_contains($relPath, '\\') || preg_match('~^(config|src|public|tests)/.+~', $relPath) !== 1 || preg_match('~(^|/)\.\.(/|$)~', $relPath)) return false;
+            if (str_starts_with($relPath, 'public/uploads/')) continue;
+            $source = $snapDir . '/files/' . $relPath;
+            if (!is_file($source)) return false;
+            if (isset($manifest['checksums'][$relPath]) && !hash_equals((string) $manifest['checksums'][$relPath], hash_file('sha256', $source) ?: '')) return false;
+        }
+
         $recordedFiles = array_flip($manifest['files']);
 
         // Snapshot trước file_scope chỉ ghi nhận PHP; giữ nguyên hành vi tương thích.
@@ -850,6 +918,7 @@ final readonly class TuzygentHarnessService
 
         // Khôi phục toàn bộ tệp trong Snapshot
         foreach ($manifest['files'] as $relPath) {
+            if (str_starts_with($relPath, 'public/uploads/')) continue;
             $srcFile = $snapDir . '/files/' . $relPath;
             $destFile = $this->basePath . '/' . $relPath;
             if (!is_file($srcFile)) return false;
@@ -1113,7 +1182,7 @@ final readonly class TuzygentHarnessService
         $current = $this->getContinuousState();
         $interval = max(1, min(300, (int) ($options['interval_seconds'] ?? $current['interval_seconds'] ?? 5)));
         $autoDiscover = isset($options['auto_discover']) ? (bool) $options['auto_discover'] : $current['auto_discover'];
-        $autoHeal = isset($options['auto_heal_on_drift']) ? (bool) $options['auto_heal_on_drift'] : $current['auto_heal_on_drift'];
+        $autoHeal = false;
         $maxCycles = isset($options['max_cycles']) ? max(0, (int) $options['max_cycles']) : 0;
         $spawnDaemon = (bool) ($options['spawn_daemon'] ?? false);
         $now = date('Y-m-d H:i:s');
@@ -1143,7 +1212,7 @@ final readonly class TuzygentHarnessService
         ]);
 
         if ($spawnDaemon && !$state['daemon_alive']) {
-            $phpBin = defined('PHP_BINARY') && PHP_BINARY !== '' ? PHP_BINARY : 'php';
+            $phpBin = is_executable(PHP_BINDIR . '/php') ? PHP_BINDIR . '/php' : 'php';
             $cliScript = $this->basePath . '/bin/tuzygent';
             $logFile = $this->harnessDir . '/continuous_daemon.log';
             $cmd = sprintf(
@@ -1208,6 +1277,7 @@ final readonly class TuzygentHarnessService
      */
     public function runContinuousCycle(?bool $overrideAutoDiscover = null, bool $queueTaskOnly = false): array
     {
+        $queueTaskOnly = true;
         $state = $this->getContinuousState();
         $cycle = $state['cycles_completed'] + 1;
         $autoDiscover = $overrideAutoDiscover ?? $state['auto_discover'];
@@ -1240,7 +1310,7 @@ final readonly class TuzygentHarnessService
         if (!empty($backlogTasks)) {
             $nextTask = $backlogTasks[0];
             if ($queueTaskOnly) {
-                $summary = sprintf('Chu kỳ #%d: Đã gửi %s vào hàng đợi Workers.', $cycle, $nextTask->taskCode);
+                $summary = sprintf('Chu kỳ #%d: Đề xuất gửi %s vào hàng đợi Workers.', $cycle, $nextTask->taskCode);
                 array_unshift($events, sprintf('[%s] 📥 %s', date('H:i:s'), $summary));
                 $updatedState = $this->saveContinuousState([
                     'cycles_completed' => $cycle,
@@ -1252,7 +1322,7 @@ final readonly class TuzygentHarnessService
                     'cycle' => $cycle,
                     'action' => 'queue_task',
                     'task' => $nextTask,
-                    'gate_passed' => true,
+                    'gate_passed' => null,
                     'summary' => $summary,
                     'state' => $updatedState,
                 ];
@@ -1307,21 +1377,23 @@ final readonly class TuzygentHarnessService
         }
 
         // Trường hợp Backlog trống -> Chạy Continuous Verification & Drift Auto-Healing
-        $gateReport = $this->runVerificationGate();
+        try {
+            $gateReport = $this->runVerificationGate();
+        } catch (RuntimeException $e) {
+            if (!str_contains($e->getMessage(), 'Không thể kiểm định khi task hoặc bản cập nhật đang chạy')) throw $e;
+            $summary = sprintf('Chu kỳ #%d: Workers đang xử lý; sẽ kiểm định khi rảnh.', $cycle);
+            $updatedState = $this->saveContinuousState(['cycles_completed' => $cycle, 'last_heartbeat' => date('Y-m-d H:i:s'), 'last_cycle_summary' => $summary]);
+            return ['cycle' => $cycle, 'action' => 'busy', 'task' => null, 'gate_passed' => null, 'summary' => $summary, 'state' => $updatedState];
+        }
         $gatePassed = $gateReport['passed'];
 
         if ($gatePassed) {
             $summary = sprintf('Chu kỳ #%d: Tuần tra Continuous Watch — Backlog trống, 3/3 Verification Gates PASS 100%%.', $cycle);
             array_unshift($events, sprintf('[%s] 🛡️ %s', date('H:i:s'), $summary));
         } else {
-            if ($state['auto_heal_on_drift'] && $state['last_healthy_snapshot'] !== '') {
-                $this->rollbackToSnapshot($state['last_healthy_snapshot']);
-                $summary = sprintf('Chu kỳ #%d: Phát hiện lỗi kiến trúc/cú pháp! Đã Auto-Heal khôi phục về Snapshot [%s].', $cycle, $state['last_healthy_snapshot']);
-                array_unshift($events, sprintf('[%s] 🚑 %s', date('H:i:s'), $summary));
-            } else {
-                $summary = sprintf('Chu kỳ #%d: Cảnh báo Verification Gate phát hiện lỗi khi tuần tra Continuous!', $cycle);
-                array_unshift($events, sprintf('[%s] ⚠️ %s', date('H:i:s'), $summary));
-            }
+            $this->stopContinuousMode(false);
+            $summary = sprintf('Chu kỳ #%d: Verification Gate thất bại; đã dừng Continuous và chờ quản trị viên kiểm tra.', $cycle);
+            array_unshift($events, sprintf('[%s] ⚠️ %s', date('H:i:s'), $summary));
         }
 
         $updatedState = $this->saveContinuousState([
@@ -1373,11 +1445,22 @@ final readonly class TuzygentHarnessService
                 break;
             }
 
-            $cycleResult = $this->runContinuousCycle($autoDiscover);
+            $cycleResult = $this->runContinuousCycle($autoDiscover, true);
             $cyclesRun++;
 
             if ($onCycle !== null) {
-                $onCycle($cycleResult);
+                try { $onCycle($cycleResult); }
+                catch (\Throwable $e) {
+                    $this->stopContinuousMode(false);
+                    $state = $this->getContinuousState();
+                    $events = $state['recent_events'];
+                    array_unshift($events, sprintf('[%s] ❌ Không thể gửi task vào Workers: %s', date('H:i:s'), $e->getMessage()));
+                    $this->saveContinuousState(['last_cycle_summary' => 'Không thể gửi task vào Workers; Continuous đã dừng.', 'recent_events' => array_slice($events, 0, 25)]);
+                    throw $e;
+                }
+            } elseif (($cycleResult['action'] ?? '') === 'queue_task') {
+                $this->stopContinuousMode(false);
+                throw new RuntimeException('Continuous cần Workers để gửi task vào hàng đợi.');
             }
 
             if ($maxCycles > 0 && $cyclesRun >= $maxCycles) {
@@ -1602,7 +1685,8 @@ SPEC,
         }
         $patchFile = $this->harnessDir . '/CURRENT_TASK.patch';
         file_put_contents($patchFile, $output, LOCK_EX);
-        [$exitCode, $applyOutput] = $this->runProcess(['git', 'apply', '--whitespace=nowarn', '--', $patchFile], 60);
+        if (($decoded['choices'][0]['finish_reason'] ?? '') === 'length') throw new RuntimeException('API trả patch bị cắt cụt; hãy chia nhỏ task.');
+        [$exitCode, $applyOutput] = $this->runProcess(['git', 'apply', '--recount', '--whitespace=nowarn', '--', $patchFile], 60);
         if ($exitCode !== 0) {
             throw new RuntimeException('Không thể áp dụng unified diff do API: ' . trim($applyOutput));
         }
@@ -2070,6 +2154,7 @@ MD;
             foreach ($iterator as $fileInfo) {
                 if ($fileInfo->isFile()) {
                     $path = $fileInfo->getRealPath();
+                    if ($path !== false && str_starts_with($path, $this->basePath . '/public/uploads/')) continue;
                     if ($path !== false) {
                         $files[] = $path;
                     }

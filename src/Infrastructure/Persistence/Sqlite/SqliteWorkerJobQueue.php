@@ -23,10 +23,28 @@ final readonly class SqliteWorkerJobQueue implements WorkerJobQueuePort
 
     public function enqueue(string $type, array $payload): int
     {
-        $now = date('Y-m-d H:i:s');
-        $stmt = $this->pdo->prepare('INSERT INTO worker_jobs(type,payload,status,created_at,updated_at) VALUES(?,?,\'queued\',?,?)');
-        $stmt->execute([$type, json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), $now, $now]);
-        return (int) $this->pdo->lastInsertId();
+        $this->pdo->exec('BEGIN IMMEDIATE');
+        try {
+            if ($type === 'harness_task') {
+                $stmt = $this->pdo->prepare("SELECT id FROM worker_jobs WHERE type='harness_task' AND status IN ('queued','running') AND CAST(json_extract(payload, '$.task_id') AS INTEGER) = CAST(? AS INTEGER) ORDER BY id LIMIT 1");
+                $stmt->execute([(int) ($payload['task_id'] ?? 0)]);
+                $existing = $stmt->fetchColumn();
+                if ($existing !== false) { $this->pdo->commit(); return (int) $existing; }
+            }
+            $now = date('Y-m-d H:i:s');
+            $stmt = $this->pdo->prepare('INSERT INTO worker_jobs(type,payload,status,created_at,updated_at) VALUES(?,?,\'queued\',?,?)');
+            $stmt->execute([$type, json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE), $now, $now]);
+            $id = (int) $this->pdo->lastInsertId();
+            $this->pdo->commit();
+            return $id;
+        } catch (\Throwable $e) { if ($this->pdo->inTransaction()) $this->pdo->rollBack(); throw $e; }
+    }
+
+    public function hasActiveHarnessTask(int $taskId): bool
+    {
+        $stmt = $this->pdo->prepare("SELECT 1 FROM worker_jobs WHERE type='harness_task' AND status IN ('queued','running') AND CAST(json_extract(payload, '$.task_id') AS INTEGER) = CAST(? AS INTEGER) LIMIT 1");
+        $stmt->execute([$taskId]);
+        return (bool) $stmt->fetchColumn();
     }
 
     public function claimNext(): ?WorkerJob
@@ -57,7 +75,7 @@ final readonly class SqliteWorkerJobQueue implements WorkerJobQueuePort
 
     public function retry(int $id): bool
     {
-        $stmt = $this->pdo->prepare("UPDATE worker_jobs SET status='queued', error=NULL, result=NULL, run_at=NULL, finished_at=NULL, updated_at=? WHERE id=? AND status='failed'");
+        $stmt = $this->pdo->prepare("UPDATE worker_jobs SET status='queued', error=NULL, result=NULL, run_at=NULL, finished_at=NULL, updated_at=? WHERE id=? AND (status='failed' OR (status='completed' AND json_valid(result) AND json_extract(result, '$.status') IN ('failed','rolled_back'))) AND NOT EXISTS (SELECT 1 FROM worker_jobs active WHERE active.id != worker_jobs.id AND active.type='harness_task' AND active.status IN ('queued','running') AND json_extract(active.payload, '$.task_id') = json_extract(worker_jobs.payload, '$.task_id'))");
         $stmt->execute([date('Y-m-d H:i:s'), $id]); return $stmt->rowCount() === 1;
     }
 

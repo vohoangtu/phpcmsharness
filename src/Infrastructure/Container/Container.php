@@ -27,6 +27,7 @@ use App\Domain\Port\Outbound\MediaRepositoryPort;
 use App\Domain\Port\Outbound\MediaStoragePort;
 use App\Domain\Port\Outbound\ModuleRegistryPort;
 use App\Domain\Port\Outbound\OrderRepositoryPort;
+use App\Domain\Port\Outbound\OrderOperationsPort;
 use App\Domain\Port\Outbound\PostRepositoryPort;
 use App\Domain\Port\Outbound\ProductRepositoryPort;
 use App\Domain\Port\Outbound\SettingRepositoryPort;
@@ -43,6 +44,7 @@ use App\Infrastructure\Persistence\Sqlite\SqliteLoginAttemptRepository;
 use App\Infrastructure\Persistence\Sqlite\SqliteMediaRepository;
 use App\Infrastructure\Persistence\Sqlite\SqliteModuleRepository;
 use App\Infrastructure\Persistence\Sqlite\SqliteOrderRepository;
+use App\Infrastructure\Persistence\Sqlite\SqliteOrderOperations;
 use App\Infrastructure\Persistence\Sqlite\SqlitePostRepository;
 use App\Infrastructure\Persistence\Sqlite\SqliteProductRepository;
 use App\Infrastructure\Persistence\Sqlite\SqliteSettingRepository;
@@ -115,6 +117,7 @@ final class Container
         $this->factories[TagRepositoryPort::class] = fn(self $c) => new SqliteTagRepository($c->get(PDO::class));
         $this->factories[CommentRepositoryPort::class] = fn(self $c) => new SqliteCommentRepository($c->get(PDO::class));
         $this->factories[OrderRepositoryPort::class] = fn(self $c) => new SqliteOrderRepository($c->get(PDO::class));
+        $this->factories[OrderOperationsPort::class] = fn(self $c) => new SqliteOrderOperations($c->get(PDO::class));
         $this->factories[MediaRepositoryPort::class] = fn(self $c) => new SqliteMediaRepository($c->get(PDO::class));
         $this->factories[UserRepositoryPort::class] = fn(self $c) => new SqliteUserRepository($c->get(PDO::class));
         $this->factories[SettingRepositoryPort::class] = fn(self $c) => new SqliteSettingRepository($c->get(PDO::class));
@@ -155,7 +158,8 @@ final class Container
             $c->get(OrderRepositoryPort::class),
             $c->get(ProductRepositoryPort::class),
             $c->get(CartPort::class),
-            $c->get(TransactionPort::class)
+            $c->get(TransactionPort::class),
+            $c->get(OrderOperationsPort::class)
         );
         $this->factories[OrderQueryService::class] = fn(self $c) => new OrderQueryService(
             $c->get(OrderRepositoryPort::class)
