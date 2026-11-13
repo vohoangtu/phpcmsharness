@@ -5,9 +5,35 @@ declare(strict_types=1);
  * @var \App\Domain\Entity\Post[] $latestPosts
  * @var array<string, bool> $enabledModules
  * @var array<string, string> $settings
+ * @var array<string, mixed> $homeSlider
  */
 ?>
 <!-- Hero Banner -->
+<?php if (!empty($homeSlider['enabled']) && !empty($homeSlider['slides'])): ?>
+    <?php $slideInterval = min(12, max(2, (int)($homeSlider['interval'] ?? 3))); $slideEffect = in_array($homeSlider['effect'] ?? 'fade', ['fade', 'zoom', 'slide'], true) ? $homeSlider['effect'] : 'fade'; ?>
+    <section class="fe-home-slider fe-slider-effect-<?= htmlspecialchars($slideEffect, ENT_QUOTES, 'UTF-8') ?>" data-home-slider data-interval="<?= $slideInterval ?>" aria-roledescription="carousel" aria-label="Banner nổi bật">
+        <div class="fe-home-slider-track">
+            <?php foreach ($homeSlider['slides'] as $index => $slide): ?>
+                <article class="fe-home-slide <?= $index === 0 ? 'is-active' : '' ?>" data-home-slide aria-roledescription="slide" aria-label="<?= $index + 1 ?> / <?= count($homeSlider['slides']) ?>">
+                    <img class="fe-home-slide-image" src="<?= htmlspecialchars((string)$slide['image'], ENT_QUOTES, 'UTF-8') ?>" alt="<?= htmlspecialchars((string)($slide['title'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" <?= $index === 0 ? 'fetchpriority="high"' : 'loading="lazy"' ?>>
+                    <div class="fe-home-slide-shade"></div>
+                    <div class="fe-home-slide-content">
+                        <?php if (!empty($slide['eyebrow'])): ?><span class="fe-hero-pill"><?= htmlspecialchars((string)$slide['eyebrow'], ENT_QUOTES, 'UTF-8') ?></span><?php endif; ?>
+                        <?php if (!empty($slide['title'])): ?><h1><?= htmlspecialchars((string)$slide['title'], ENT_QUOTES, 'UTF-8') ?></h1><?php endif; ?>
+                        <?php if (!empty($slide['description'])): ?><p><?= htmlspecialchars((string)$slide['description'], ENT_QUOTES, 'UTF-8') ?></p><?php endif; ?>
+                        <?php if (!empty($slide['button_text']) && !empty($slide['button_url'])): ?><a class="fe-btn fe-btn-primary" href="<?= htmlspecialchars((string)$slide['button_url'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars((string)$slide['button_text'], ENT_QUOTES, 'UTF-8') ?> <span aria-hidden="true">→</span></a><?php endif; ?>
+                    </div>
+                </article>
+            <?php endforeach; ?>
+        </div>
+        <?php if (count($homeSlider['slides']) > 1): ?>
+            <button class="fe-slider-arrow fe-slider-prev" type="button" data-slider-prev aria-label="Ảnh trước">‹</button>
+            <button class="fe-slider-arrow fe-slider-next" type="button" data-slider-next aria-label="Ảnh tiếp theo">›</button>
+            <div class="fe-slider-footer"><div class="fe-slider-dots" role="group" aria-label="Chọn ảnh banner"><?php foreach ($homeSlider['slides'] as $index => $_slide): ?><button type="button" data-slider-dot="<?= $index ?>" class="<?= $index === 0 ? 'is-active' : '' ?>" aria-label="Đến ảnh <?= $index + 1 ?>" aria-current="<?= $index === 0 ? 'true' : 'false' ?>"></button><?php endforeach; ?></div><button type="button" class="fe-slider-pause" data-slider-pause aria-label="Tạm dừng trình chiếu">Ⅱ</button></div>
+        <?php endif; ?>
+    </section>
+    <script src="/assets/js/home-slider.js" defer></script>
+<?php else: ?>
 <section class="fe-hero">
     <div class="fe-hero-content">
         <span class="fe-hero-pill">⬡ PHP 8.5 Hexagonal Architecture CMS</span>
@@ -24,6 +50,7 @@ declare(strict_types=1);
         </div>
     </div>
 </section>
+<?php endif; ?>
 
 <!-- Featured Products Section (Chỉ hiển thị khi Module PRODUCTS đang BẬT) -->
 <?php if (!empty($enabledModules['products'])): ?>

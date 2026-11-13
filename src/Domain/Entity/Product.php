@@ -31,7 +31,9 @@ final class Product
         public bool $isFeatured = false,
         public array $tags = [],
         public string $createdAt = '',
-        public string $updatedAt = ''
+        public string $updatedAt = '',
+        public string $seoTitle = '',
+        public string $seoDescription = ''
     ) {
     }
 

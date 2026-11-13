@@ -7,12 +7,14 @@ namespace App\Application\Service;
 use App\Domain\Entity\MediaFile;
 use App\Domain\Port\Outbound\MediaRepositoryPort;
 use App\Domain\Port\Outbound\MediaStoragePort;
+use App\Application\Extension\HookRegistry;
 
 final readonly class MediaService
 {
     public function __construct(
         private MediaRepositoryPort $mediaRepository,
-        private MediaStoragePort $mediaStorage
+        private MediaStoragePort $mediaStorage,
+        private ?HookRegistry $hooks = null
     ) {
     }
 
@@ -58,7 +60,7 @@ final readonly class MediaService
         $media = $this->mediaStorage->storeUploadedFile($uploadedFile, $altText);
         $id = $this->mediaRepository->save($media);
 
-        return new MediaFile(
+        $saved = new MediaFile(
             id: $id,
             filename: $media->filename,
             originalName: $media->originalName,
@@ -69,6 +71,8 @@ final readonly class MediaService
             width: $media->width,
             height: $media->height
         );
+        $this->hooks?->doAction('media.uploaded', $saved);
+        return $saved;
     }
 
     public function delete(int $id): void

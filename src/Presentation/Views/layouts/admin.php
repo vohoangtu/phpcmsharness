@@ -21,7 +21,7 @@ $isActive = fn(string $prefix): string => str_starts_with($currentUri, $prefix) 
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Bảng điều khiển quản trị WP-Hexagon CMS để quản lý nội dung và vận hành website.">
     <title><?= htmlspecialchars($pageTitle ?? 'Admin') ?> ‹ <?= $siteTitle ?> — WP-Hexagon</title>
-    <link rel="stylesheet" href="/assets/css/admin.css">
+    <link rel="stylesheet" href="/assets/css/admin.css?v=20261113-editor-layout">
 </head>
 <body class="wp-admin-body <?= $currentUri === '/admin' ? 'wp-admin-dashboard' : '' ?>">
     <!-- Top Admin Bar (Giống WordPress) -->
@@ -152,6 +152,19 @@ $isActive = fn(string $prefix): string => str_starts_with($currentUri, $prefix) 
                     <span class="wp-nav-icon">⚙️</span>
                     <span class="wp-nav-text">Cài đặt (Settings)</span>
                 </a>
+                <a href="/admin/home-slider" class="wp-nav-item <?= $isActive('/admin/home-slider') ?>"><span class="wp-nav-icon">🖼️</span><span class="wp-nav-text">Slider trang chủ</span></a>
+                <a href="/admin/extensions" class="wp-nav-item <?= $isActive('/admin/extensions') ?>"><span class="wp-nav-icon">🧩</span><span class="wp-nav-text">Extensions</span></a>
+                <?php if (!empty($enabledModules['analytics']) || !empty($enabledModules['performance'])): ?>
+                    <div class="wp-subnav">
+                        <?php if (!empty($enabledModules['analytics'])): ?><a href="/admin/analytics" class="<?= $isActive('/admin/analytics') ?>">Analytics &amp; API (GA4)</a><?php endif; ?>
+                        <?php if (!empty($enabledModules['performance'])): ?><a href="/admin/performance" class="<?= $isActive('/admin/performance') ?>">Performance</a><?php endif; ?>
+                    </div>
+                <?php endif; ?>
+                <?php foreach (($extensionAdminNavItems ?? []) as $extensionNav): ?>
+                    <?php if (is_array($extensionNav) && is_string($extensionNav['href'] ?? null) && str_starts_with($extensionNav['href'], '/admin/') && is_string($extensionNav['label'] ?? null)): ?>
+                        <a href="<?= htmlspecialchars($extensionNav['href'], ENT_QUOTES, 'UTF-8') ?>" class="wp-nav-item <?= $isActive($extensionNav['href']) ?>"><span class="wp-nav-icon"><?= htmlspecialchars((string)($extensionNav['icon'] ?? '🔧'), ENT_QUOTES, 'UTF-8') ?></span><span class="wp-nav-text"><?= htmlspecialchars($extensionNav['label'], ENT_QUOTES, 'UTF-8') ?></span></a>
+                    <?php endif; ?>
+                <?php endforeach; ?>
             </nav>
         </aside>
 
@@ -170,6 +183,7 @@ $isActive = fn(string $prefix): string => str_starts_with($currentUri, $prefix) 
     </div>
 
     <script src="/assets/js/admin.js"></script>
+    <script src="/assets/js/ai-assistant.js?v=20261113-worker-json-fix" defer></script>
     <script src="/assets/js/rich-text-editor.bundle.js" defer></script>
 </body>
 </html>

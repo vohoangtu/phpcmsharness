@@ -9,12 +9,14 @@ use App\Domain\Enum\ContentStatus;
 use App\Domain\Port\Outbound\PostRepositoryPort;
 use App\Domain\Port\Outbound\TagRepositoryPort;
 use App\Domain\ValueObject\Slug;
+use App\Application\Extension\HookRegistry;
 
 final readonly class PostService
 {
     public function __construct(
         private PostRepositoryPort $postRepository,
-        private TagRepositoryPort $tagRepository
+        private TagRepositoryPort $tagRepository,
+        private ?HookRegistry $hooks = null
     ) {
     }
 
@@ -71,7 +73,9 @@ final readonly class PostService
             categoryId: $categoryId,
             categoryName: null,
             authorId: $authorId,
-            authorName: ''
+            authorName: '',
+            seoTitle: trim((string) ($data['seo_title'] ?? '')),
+            seoDescription: trim((string) ($data['seo_description'] ?? ''))
         );
 
         $savedId = $this->postRepository->save($post);
@@ -79,6 +83,8 @@ final readonly class PostService
         $rawTags = (string) ($data['tags'] ?? '');
         $tagNames = array_values(array_filter(array_map('trim', explode(',', $rawTags)), fn(string $t) => $t !== ''));
         $this->tagRepository->syncPostTags($savedId, $tagNames);
+        $savedPost = $this->postRepository->findById($savedId);
+        if ($savedPost !== null) $this->hooks?->doAction('post.saved', $savedPost);
 
         return $savedId;
     }

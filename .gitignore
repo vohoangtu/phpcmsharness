@@ -28,6 +28,7 @@
 /storage/workers/
 /storage/sessions/
 /storage/logs/
+/storage/secrets/
 /storage/database.sqlite
 /storage/database.sqlite-*
 /public/uploads/

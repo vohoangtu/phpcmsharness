@@ -18,7 +18,7 @@ declare(strict_types=1);
         <div class="fe-product-main-img">
             <?php if ($product->featuredImage !== '' || !empty($product->galleryImages)): ?>
                 <?php $initialGalleryImage = $product->featuredImage !== '' ? $product->featuredImage : $product->galleryImages[0]; ?>
-                <img src="<?= htmlspecialchars($initialGalleryImage, ENT_QUOTES, 'UTF-8') ?>" id="main-prod-img" alt="<?= htmlspecialchars($product->name, ENT_QUOTES, 'UTF-8') ?>">
+                <img src="<?= htmlspecialchars($initialGalleryImage, ENT_QUOTES, 'UTF-8') ?>" id="main-prod-img" alt="<?= htmlspecialchars($product->name, ENT_QUOTES, 'UTF-8') ?>"<?= $initialGalleryImage === $product->featuredImage && isset($featuredImageWidth, $featuredImageHeight) && $featuredImageWidth > 0 && $featuredImageHeight > 0 ? ' width="' . (int)$featuredImageWidth . '" height="' . (int)$featuredImageHeight . '"' : '' ?> fetchpriority="high" decoding="async">
             <?php else: ?>
                 <div class="fe-img-placeholder">🛍️</div>
             <?php endif; ?>
@@ -114,6 +114,21 @@ declare(strict_types=1);
         <?= \App\Presentation\Security\HtmlContentSanitizer::sanitize($product->description) ?>
     </div>
 </section>
+
+<?php
+$schemaBase = rtrim((string)($settings['site_url'] ?? ''), '/');
+$schemaImage = $product->featuredImage !== '' ? (preg_match('#^https?://#i', $product->featuredImage) ? $product->featuredImage : ($schemaBase !== '' ? $schemaBase . '/' . ltrim($product->featuredImage, '/') : $product->featuredImage)) : null;
+$schemaProduct = ['@context'=>'https://schema.org','@type'=>'Product','name'=>$product->name,'description'=>$product->seoDescription !== '' ? $product->seoDescription : $product->shortDescription,'sku'=>$product->sku,'url'=>$canonicalUrl ?: null,'offers'=>['@type'=>'Offer','priceCurrency'=>'VND','price'=>number_format($product->effectivePrice(), 0, '.', ''),'availability'=>$product->inStock() ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock','itemCondition'=>'https://schema.org/NewCondition']];
+if ($schemaImage) $schemaProduct['image'] = [$schemaImage];
+?>
+<script type="application/ld+json"><?= json_encode($schemaProduct, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?></script>
+
+<?php if (!empty($settings['ga4_measurement_id'])): ?>
+<script>
+if (typeof gtag === 'function') gtag('event','view_item',{currency:'VND',value:<?= (int)$product->effectivePrice() ?>,items:[{item_id:<?= json_encode((string)$product->sku, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT) ?>,item_name:<?= json_encode($product->name, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT) ?>,price:<?= (int)$product->effectivePrice() ?>,quantity:1}]});
+document.querySelector('.fe-buy-box')?.addEventListener('submit',function(){if(typeof gtag==='function'){const q=Number(this.querySelector('[name="quantity"]')?.value||1);gtag('event','add_to_cart',{currency:'VND',value:<?= (int)$product->effectivePrice() ?>*q,items:[{item_id:<?= json_encode((string)$product->sku, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT) ?>,item_name:<?= json_encode($product->name, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT) ?>,price:<?= (int)$product->effectivePrice() ?>,quantity:q}]});}});
+</script>
+<?php endif; ?>
 
 <?php if (!empty($enabledModules['comments'])): ?>
     <section id="reviews" class="fe-comments-section">

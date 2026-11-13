@@ -12,6 +12,7 @@ use App\Domain\Enum\ContentStatus;
 use App\Domain\Enum\ModuleKey;
 use App\Domain\Enum\ProductSort;
 use App\Domain\Port\Outbound\SettingRepositoryPort;
+use App\Domain\Port\Outbound\MediaRepositoryPort;
 use App\Presentation\Controller\BaseController;
 
 final class ShopController extends BaseController
@@ -81,10 +82,18 @@ final class ShopController extends BaseController
         $reviews = $moduleManager->isEnabled(ModuleKey::COMMENTS)
             ? $commentService->getApprovedComments('product', (int) $product->id)
             : [];
+        $featuredMedia = $product->featuredImage !== ''
+            ? $this->container->get(MediaRepositoryPort::class)->findByFilePath($product->featuredImage)
+            : null;
 
         $this->view->renderFrontend('frontend/shop/show', [
             'pageTitle' => $product->name,
-            'metaDescription' => $product->shortDescription,
+            'seoTitle' => $product->seoTitle !== '' ? $product->seoTitle : $product->name,
+            'metaDescription' => $product->seoDescription !== '' ? $product->seoDescription : $product->shortDescription,
+            'ogType' => 'product',
+            'ogImage' => $product->featuredImage,
+            'featuredImageWidth' => $featuredMedia?->width,
+            'featuredImageHeight' => $featuredMedia?->height,
             'product' => $product,
             'reviews' => $reviews,
             'adminEditUrl' => '/admin/products/edit/' . $product->id,

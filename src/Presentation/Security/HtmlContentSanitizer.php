@@ -25,7 +25,7 @@ final class HtmlContentSanitizer
 
         $config = \HTMLPurifier_Config::createDefault();
         $config->set('Core.Encoding', 'UTF-8');
-        $config->set('HTML.Allowed', 'a[href|title|target|rel],b,blockquote,br,em,figure,figcaption,h1[style],h2[style],h3[style],h4[style],h5[style],h6[style],i,iframe[src|width|height|allow|allowfullscreen|title],img[src|alt|width|height],li,ol,p[style],strong,table,tbody,td[colspan|rowspan|style],th[colspan|rowspan|style],thead,tr,u,ul');
+        $config->set('HTML.Allowed', 'a[href|title|target|rel],b,blockquote,br,em,figure,figcaption,h1[style],h2[style],h3[style],h4[style],h5[style],h6[style],i,iframe[src|width|height|allow|allowfullscreen|title],img[src|alt|width|height],li,ol,p[style],span[style],strong,table,tbody,td[colspan|rowspan|style],th[colspan|rowspan|style],thead,tr,u,ul');
         $config->set('URI.AllowedSchemes', ['http' => true, 'https' => true, 'mailto' => true]);
         $config->set('HTML.SafeIframe', true);
         $config->set('URI.SafeIframeRegexp', '%^(https?:)?//(www\\.)?(youtube-nocookie\\.com/embed/|youtube\\.com/embed/)%');

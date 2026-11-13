@@ -1,4 +1,4 @@
-import { Editor, Node } from '@tiptap/core';
+import { Editor, Mark, Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
@@ -18,8 +18,27 @@ const YoutubeEmbed = Node.create({
     renderHTML: ({ HTMLAttributes }) => ['iframe', { ...HTMLAttributes, 'data-youtube-embed': 'true', width: '560', height: '315', title: 'YouTube video', allowfullscreen: 'true', allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share', loading: 'lazy' }],
 });
 
+// A small MIT-compatible text style mark. Keeping the style attributes explicit
+// makes the output predictable and lets the server sanitizer validate the CSS.
+const TextStyle = Mark.create({
+    name: 'textStyle',
+    addAttributes: () => ({
+        fontFamily: { default: null, parseHTML: element => element.style.fontFamily || null },
+        fontSize: { default: null, parseHTML: element => element.style.fontSize || null },
+        color: { default: null, parseHTML: element => element.style.color || null },
+        backgroundColor: { default: null, parseHTML: element => element.style.backgroundColor || null },
+    }),
+    parseHTML: () => [{ tag: 'span[style]' }],
+    renderHTML: ({ HTMLAttributes, mark }) => {
+        const { fontFamily, fontSize, color, backgroundColor } = mark.attrs;
+        const style = [fontFamily && `font-family: ${fontFamily}`, fontSize && `font-size: ${fontSize}`, color && `color: ${color}`, backgroundColor && `background-color: ${backgroundColor}`].filter(Boolean).join('; ');
+        return ['span', { ...HTMLAttributes, ...(style ? { style } : {}) }, 0];
+    },
+});
+
 const extensions = [
     StarterKit,
+    TextStyle,
     Underline,
     Link.configure({ openOnClick: false, protocols: ['mailto'] }),
     Image.configure({
@@ -68,6 +87,7 @@ document.querySelectorAll('[data-rich-text-editor]').forEach(wrapper => {
             italic: () => chain.toggleItalic().run(),
             underline: () => chain.toggleUnderline().run(),
             strike: () => chain.toggleStrike().run(),
+            clearFormatting: () => chain.unsetAllMarks().clearNodes().run(),
             bulletList: () => chain.toggleBulletList().run(),
             orderedList: () => chain.toggleOrderedList().run(),
             blockquote: () => chain.toggleBlockquote().run(),
@@ -110,6 +130,40 @@ document.querySelectorAll('[data-rich-text-editor]').forEach(wrapper => {
         };
         commands[command]?.();
     });
+
+    toolbar.addEventListener('change', event => {
+        const control = event.target;
+        const chain = editor.chain().focus();
+        if (control.matches('[data-editor-font-family]')) chain.setMark('textStyle', { fontFamily: control.value || null }).run();
+        if (control.matches('[data-editor-font-size]')) chain.setMark('textStyle', { fontSize: control.value || null }).run();
+        if (control.matches('[data-editor-color]')) chain.setMark('textStyle', { color: control.value }).run();
+        if (control.matches('[data-editor-highlight]')) chain.setMark('textStyle', { backgroundColor: control.value }).run();
+    });
+
+    const wordCount = toolbar.querySelector('[data-editor-word-count]');
+    const refreshWordCount = () => {
+        if (!wordCount) return;
+        const text = editor.getText().trim();
+        const words = text ? text.split(/\s+/u).length : 0;
+        wordCount.textContent = `${words.toLocaleString('vi-VN')} từ · ${text.length.toLocaleString('vi-VN')} ký tự`;
+    };
+    editor.on('update', refreshWordCount);
+    refreshWordCount();
+
+    toolbar.addEventListener('mousedown', event => {
+        if (event.target.closest('button')) event.preventDefault();
+    });
+
+    const refreshActiveTools = () => toolbar.querySelectorAll('[data-editor-command]').forEach(button => {
+        const command = button.dataset.editorCommand;
+        const active = ({ bold: 'bold', italic: 'italic', underline: 'underline', strike: 'strike', bulletList: 'bulletList', orderedList: 'orderedList', blockquote: 'blockquote' })[command];
+        if (active) {
+            const selected = editor.isActive(active);
+            button.classList.toggle('is-active', selected);
+            button.setAttribute('aria-pressed', String(selected));
+        }
+    });
+    editor.on('selectionUpdate', refreshActiveTools);
 
     toolbar.querySelector('[data-editor-command="heading"]')?.addEventListener('change', event => {
         const tag = event.target.value;

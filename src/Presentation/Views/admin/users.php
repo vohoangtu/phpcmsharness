@@ -9,7 +9,7 @@ declare(strict_types=1);
     </div>
 </div>
 
-<div class="wp-editor-layout">
+<div class="wp-editor-layout wp-users-layout">
     <div class="wp-editor-sidebar">
         <div class="wp-card">
             <div class="wp-card-header">
@@ -48,7 +48,8 @@ declare(strict_types=1);
 
     <div class="wp-editor-main">
         <div class="wp-card">
-            <table class="wp-table">
+            <div class="wp-users-table-wrap">
+            <table class="wp-table wp-users-table">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -81,6 +82,7 @@ declare(strict_types=1);
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>

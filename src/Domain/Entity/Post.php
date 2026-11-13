@@ -26,7 +26,9 @@ final class Post
         public int $views = 0,
         public array $tags = [],
         public string $createdAt = '',
-        public string $updatedAt = ''
+        public string $updatedAt = '',
+        public string $seoTitle = '',
+        public string $seoDescription = ''
     ) {
     }
 

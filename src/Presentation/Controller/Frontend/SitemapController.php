@@ -11,6 +11,7 @@ use App\Application\Service\SitemapXmlBuilder;
 use App\Domain\Enum\ContentStatus;
 use App\Domain\Enum\ModuleKey;
 use App\Domain\Enum\ProductSort;
+use App\Domain\Port\Outbound\SettingRepositoryPort;
 use App\Infrastructure\Container\Container;
 use App\Presentation\Controller\BaseController;
 use App\Presentation\View\ViewRenderer;
@@ -36,7 +37,8 @@ final class SitemapController extends BaseController
         $productCount = $productService?->countProducts(ContentStatus::PUBLISHED) ?? 0;
         $staticCount = 1 + (int) $postsEnabled + (int) $productsEnabled;
         $contentCount = $postCount + $productCount;
-        $builder = new SitemapXmlBuilder($this->siteUrl);
+        $siteUrl = (string)$this->container->get(SettingRepositoryPort::class)->get('site_url', $this->siteUrl);
+        $builder = new SitemapXmlBuilder($siteUrl);
 
         $rawPart = $_GET['part'] ?? null;
         $part = null;

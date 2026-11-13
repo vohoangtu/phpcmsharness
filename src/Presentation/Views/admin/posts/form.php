@@ -11,6 +11,7 @@ $isEdit = $post !== null;
 <div class="wp-page-header">
     <div>
         <h1 class="wp-page-title"><?= $isEdit ? '✏️ Chỉnh sửa Bài viết' : '📝 Thêm Bài viết mới' ?></h1>
+        <p class="wp-page-subtitle">Soạn nội dung, thiết lập hiển thị và tối ưu SEO trong cùng một biểu mẫu.</p>
     </div>
     <div class="wp-header-actions">
         <?php if ($isEdit): ?>
@@ -20,7 +21,7 @@ $isEdit = $post !== null;
     </div>
 </div>
 
-<form method="POST" action="/admin/posts/save" enctype="multipart/form-data" class="wp-editor-layout">
+<form method="POST" action="/admin/posts/save" enctype="multipart/form-data" class="wp-editor-layout post-editor-form">
             <?= \App\Presentation\Http\Csrf::field() ?>
     <?php if ($isEdit): ?>
         <input type="hidden" name="id" value="<?= $post->id ?>">
@@ -59,17 +60,10 @@ $isEdit = $post !== null;
             <label id="post-content-label" for="raw-content">Nội dung bài viết</label>
             <div class="wp-rich-text-editor" data-rich-text-editor data-source-id="raw-content">
                 <div class="wp-editor-toolbar" data-rich-text-toolbar role="toolbar" aria-label="Công cụ định dạng nội dung">
-                    <button type="button" data-editor-command="bold" title="In đậm"><b>B</b></button>
-                    <button type="button" data-editor-command="italic" title="In nghiêng"><i>I</i></button>
-                    <button type="button" data-editor-command="underline" title="Gạch chân"><u>U</u></button>
-                    <button type="button" data-editor-command="strike" title="Gạch ngang"><s>S</s></button>
-                    <select data-editor-command="heading" aria-label="Kiểu tiêu đề"><option value="p">Đoạn văn</option><option value="h2">Tiêu đề 2</option><option value="h3">Tiêu đề 3</option><option value="h4">Tiêu đề 4</option></select>
-                    <button type="button" data-editor-command="bulletList">• Danh sách</button><button type="button" data-editor-command="orderedList">1. Danh sách</button>
-                    <button type="button" data-editor-command="blockquote">Trích dẫn</button><button type="button" data-editor-command="link">🔗 Link</button><button type="button" data-editor-command="unlink">Bỏ link</button>
-                    <button type="button" data-editor-command="insertTable">▦ Bảng</button><button type="button" data-editor-command="addRow">＋ Hàng</button><button type="button" data-editor-command="deleteTable">Xóa bảng</button>
-                    <button type="button" data-editor-command="image" title="Chọn ảnh, sau đó kéo nút ở góc để đổi kích thước">🖼 Ảnh</button><button type="button" data-editor-command="youtube">▶ Video</button>
-                    <button type="button" data-editor-command="alignLeft">≡</button><button type="button" data-editor-command="alignCenter">☰</button><button type="button" data-editor-command="alignRight">≡</button>
-                    <button type="button" data-editor-command="undo">↶</button><button type="button" data-editor-command="redo">↷</button><button type="button" data-editor-command="source" class="wp-toolbar-right">&lt;/&gt; HTML</button>
+                    <div class="wp-toolbar-group" aria-label="Kiểu chữ"><button type="button" data-editor-command="bold" title="In đậm"><b>B</b></button><button type="button" data-editor-command="italic" title="In nghiêng"><i>I</i></button><button type="button" data-editor-command="underline" title="Gạch chân"><u>U</u></button><button type="button" data-editor-command="strike" title="Gạch ngang"><s>S</s></button><select data-editor-font-family aria-label="Phông chữ"><option value="">Phông chữ</option><option value="Arial, sans-serif">Arial</option><option value="Georgia, serif">Georgia</option><option value="'Times New Roman', serif">Times New Roman</option><option value="Verdana, sans-serif">Verdana</option></select><select data-editor-font-size aria-label="Cỡ chữ"><option value="">Cỡ chữ</option><option value="12px">12</option><option value="14px">14</option><option value="16px">16</option><option value="18px">18</option><option value="24px">24</option><option value="32px">32</option></select></div>
+                    <div class="wp-toolbar-group" aria-label="Định dạng đoạn"><select data-editor-command="heading" aria-label="Kiểu tiêu đề"><option value="p">Đoạn văn</option><option value="h2">Tiêu đề 2</option><option value="h3">Tiêu đề 3</option><option value="h4">Tiêu đề 4</option></select><button type="button" data-editor-command="bulletList">• Danh sách</button><button type="button" data-editor-command="orderedList">1. Danh sách</button><button type="button" data-editor-command="blockquote">Trích dẫn</button><button type="button" data-editor-command="alignLeft" title="Căn trái">☰</button><button type="button" data-editor-command="alignCenter" title="Căn giữa">≡</button><button type="button" data-editor-command="alignRight" title="Căn phải">☷</button></div>
+                    <div class="wp-toolbar-group" aria-label="Chèn nội dung"><button type="button" data-editor-command="link">🔗 Liên kết</button><button type="button" data-editor-command="unlink">Bỏ link</button><button type="button" data-editor-command="insertTable">▦ Bảng</button><button type="button" data-editor-command="addRow">＋ Hàng</button><button type="button" data-editor-command="deleteTable">Xóa bảng</button><button type="button" data-editor-command="image" title="Chọn ảnh từ Media Library; kéo góc ảnh để đổi kích thước">🖼 Ảnh</button><button type="button" data-editor-command="youtube">▶ Video</button></div>
+                    <div class="wp-toolbar-group" aria-label="Màu và hoàn tác"><label class="wp-editor-color" title="Màu chữ">A <input type="color" data-editor-color value="#303754" aria-label="Màu chữ"></label><label class="wp-editor-color" title="Tô sáng">▰ <input type="color" data-editor-highlight value="#fff2a8" aria-label="Màu nền chữ"></label><button type="button" data-editor-command="clearFormatting" title="Xóa định dạng">Tx</button><button type="button" data-editor-command="undo" title="Hoàn tác">↶</button><button type="button" data-editor-command="redo" title="Làm lại">↷</button></div><span class="wp-editor-word-count" data-editor-word-count aria-live="polite"></span><button type="button" data-editor-command="source" class="wp-toolbar-right">&lt;/&gt; HTML</button>
                 </div>
                 <div id="visual-editor" class="wp-visual-editor" data-rich-text-surface role="textbox" aria-multiline="true" aria-labelledby="post-content-label" hidden></div>
             <textarea
@@ -82,6 +76,7 @@ $isEdit = $post !== null;
         </div>
 
         <div class="wp-card">
+            <div class="wp-card-header"><h2>📝 Tóm tắt bài viết</h2></div>
             <div class="wp-form-group">
                 <label for="post-excerpt">Tóm tắt ngắn (Excerpt)</label>
                 <textarea
@@ -92,6 +87,12 @@ $isEdit = $post !== null;
                     class="wp-textarea"
                 ><?= htmlspecialchars($post->excerpt ?? '') ?></textarea>
             </div>
+        </div>
+        <div class="wp-card wp-mb-20 seo-editor-card">
+            <div class="wp-card-header"><h2>🔎 SEO &amp; chia sẻ mạng xã hội</h2><div class="ai-assistant-actions"><button type="button" class="wp-btn wp-btn-secondary" data-ai-action="post_seo">✨ Gợi ý SEO</button><button type="button" class="wp-btn wp-btn-secondary" data-ai-action="content_audit">🔎 Phân tích nội dung</button><button type="button" class="wp-btn wp-btn-secondary" data-ai-action="keyword_ideas">🏷️ Nghiên cứu từ khóa</button><button type="button" class="wp-btn wp-btn-secondary" data-ai-action="article_draft">✍️ Viết bản nháp</button></div></div>
+            <div class="wp-form-group"><label for="ai-article-brief">Yêu cầu / đối tượng / ý chính cho AI (tùy chọn)</label><textarea id="ai-article-brief" class="wp-textarea" rows="3" data-ai-brief placeholder="Ví dụ: hướng dẫn cho chủ shop mới, giọng chuyên nghiệp, nêu 5 bước tối ưu..."></textarea><small class="wp-text-muted">Khi bấm AI, tiêu đề, nội dung, thẻ và yêu cầu này được gửi tới provider đã cấu hình trong Harness. Kết quả chỉ điền vào biểu mẫu sau khi bạn chọn áp dụng.</small></div>
+            <div class="wp-form-group"><label for="post-seo-title">SEO title</label><input id="post-seo-title" name="seo_title" class="wp-input" maxlength="70" value="<?= htmlspecialchars($post->seoTitle ?? '') ?>" placeholder="Để trống để dùng tiêu đề bài viết"><small class="wp-text-muted">Tùy chọn · tối đa 70 ký tự.</small></div>
+            <div class="wp-form-group"><label for="post-seo-description">Meta description</label><textarea id="post-seo-description" name="seo_description" class="wp-textarea" rows="3" maxlength="160" placeholder="Để trống để dùng phần tóm tắt bài viết"><?= htmlspecialchars($post->seoDescription ?? '') ?></textarea><small class="wp-text-muted">Tùy chọn · tối đa 160 ký tự. Công cụ tìm kiếm có thể tự chọn đoạn trích khác.</small></div>
         </div>
     </div>
 
@@ -117,9 +118,9 @@ $isEdit = $post !== null;
 
         <?php if (!empty($enabledModules['categories_tags'])): ?>
             <!-- Category Box -->
-            <div class="wp-card wp-mb-20">
+            <div class="wp-card wp-mb-20 post-taxonomy-card">
                 <div class="wp-card-header">
-                    <h2>📁 Danh mục bài viết</h2>
+                    <h2>📁 Phân loại bài viết</h2>
                     <a href="/admin/categories?type=post" class="wp-link">+ Thêm mới</a>
                 </div>
                 <div class="wp-form-group">
@@ -132,13 +133,6 @@ $isEdit = $post !== null;
                             </option>
                         <?php endforeach; ?>
                     </select>
-                </div>
-            </div>
-
-            <!-- Tags Box -->
-            <div class="wp-card wp-mb-20">
-                <div class="wp-card-header">
-                    <h2>🏷️ Thẻ (Tags)</h2>
                 </div>
                 <div class="wp-form-group">
                     <label for="post-tags">Thẻ (Tags)</label>

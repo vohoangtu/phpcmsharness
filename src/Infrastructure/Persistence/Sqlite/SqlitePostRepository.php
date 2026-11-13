@@ -144,8 +144,8 @@ final readonly class SqlitePostRepository implements PostRepositoryPort
         $now = date('Y-m-d H:i:s');
         if ($post->id === null) {
             $stmt = $this->pdo->prepare('
-                INSERT INTO posts (title, slug, excerpt, content, featured_image, status, category_id, author_id, views, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO posts (title, slug, excerpt, content, featured_image, status, category_id, author_id, views, created_at, updated_at, seo_title, seo_description)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ');
             $stmt->execute([
                 $post->title,
@@ -159,13 +159,15 @@ final readonly class SqlitePostRepository implements PostRepositoryPort
                 $post->views,
                 $now,
                 $now,
+                $post->seoTitle,
+                $post->seoDescription,
             ]);
             return (int) $this->pdo->lastInsertId();
         }
 
         $stmt = $this->pdo->prepare('
             UPDATE posts
-            SET title = ?, slug = ?, excerpt = ?, content = ?, featured_image = ?, status = ?, category_id = ?, updated_at = ?
+            SET title = ?, slug = ?, excerpt = ?, content = ?, featured_image = ?, status = ?, category_id = ?, updated_at = ?, seo_title = ?, seo_description = ?
             WHERE id = ?
         ');
         $stmt->execute([
@@ -177,6 +179,8 @@ final readonly class SqlitePostRepository implements PostRepositoryPort
             $post->status->value,
             $post->categoryId,
             $now,
+            $post->seoTitle,
+            $post->seoDescription,
             $post->id,
         ]);
         return $post->id;
@@ -252,7 +256,9 @@ final readonly class SqlitePostRepository implements PostRepositoryPort
             views: (int) $row['views'],
             tags: $tags,
             createdAt: (string) $row['created_at'],
-            updatedAt: (string) $row['updated_at']
+            updatedAt: (string) $row['updated_at'],
+            seoTitle: (string) ($row['seo_title'] ?? ''),
+            seoDescription: (string) ($row['seo_description'] ?? '')
         );
     }
 }

@@ -40,6 +40,15 @@ declare(strict_types=1);
     <?php endif; ?>
 </article>
 
+<?php
+$schemaBase = rtrim((string)($settings['site_url'] ?? ''), '/');
+$schemaImage = $post->featuredImage !== '' ? (preg_match('#^https?://#i', $post->featuredImage) ? $post->featuredImage : ($schemaBase !== '' ? $schemaBase . '/' . ltrim($post->featuredImage, '/') : $post->featuredImage)) : null;
+$publishedDate = strtotime($post->createdAt); $modifiedDate = strtotime($post->updatedAt !== '' ? $post->updatedAt : $post->createdAt);
+$schemaArticle = ['@context'=>'https://schema.org','@type'=>'BlogPosting','headline'=>$post->seoTitle !== '' ? $post->seoTitle : $post->title,'description'=>$post->seoDescription !== '' ? $post->seoDescription : $post->excerpt,'datePublished'=>$publishedDate ? date(DATE_ATOM, $publishedDate) : $post->createdAt,'dateModified'=>$modifiedDate ? date(DATE_ATOM, $modifiedDate) : $post->createdAt,'author'=>['@type'=>'Person','name'=>$post->authorName],'publisher'=>['@type'=>'Organization','name'=>$settings['site_title'] ?? ''],'mainEntityOfPage'=>$canonicalUrl ?: null];
+if ($schemaImage) $schemaArticle['image'] = [$schemaImage];
+?>
+<script type="application/ld+json"><?= json_encode($schemaArticle, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?></script>
+
 <?php if (!empty($enabledModules['comments'])): ?>
     <section id="comments" class="fe-comments-section">
         <h2>💬 Bình luận (<?= count($comments) ?>)</h2>

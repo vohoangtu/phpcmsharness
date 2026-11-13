@@ -14,6 +14,8 @@ enum ModuleKey: string
     case CATEGORIES_TAGS = 'categories_tags';
     case HARNESS = 'harness';
     case WORKERS = 'workers';
+    case ANALYTICS = 'analytics';
+    case PERFORMANCE = 'performance';
 
     public function label(): string
     {
@@ -26,6 +28,8 @@ enum ModuleKey: string
             self::CATEGORIES_TAGS => 'Danh mục & Thẻ (Taxonomies)',
             self::HARNESS => 'Tuzygent AI Harness (Tự phát triển Code)',
             self::WORKERS => 'Workers (Hàng đợi tác vụ nền)',
+            self::ANALYTICS => 'Analytics (Google Analytics 4)',
+            self::PERFORMANCE => 'Performance (Tối ưu hiệu năng)',
         };
     }
 
@@ -40,6 +44,8 @@ enum ModuleKey: string
             self::CATEGORIES_TAGS => 'Phân loại bài viết & sản phẩm theo Danh mục đa cấp và gắn thẻ Tags chuẩn SEO.',
             self::HARNESS => 'Hệ thống Autonomous Self-Evolving Code Harness kiểu Tuzygent: Quản lý Backlog, tự sinh/sửa code theo chuẩn Hexagonal, chạy Verification Gate, Self-Healing và Snapshot Rollback.',
             self::WORKERS => 'Hàng đợi SQLite bền vững và worker tuần tự để xử lý tác vụ nền từ Harness và các module khác.',
+            self::ANALYTICS => 'Theo dõi hành vi và thương mại điện tử trên website, đọc báo cáo GA4 qua Google Analytics Data API.',
+            self::PERFORMANCE => 'Theo dõi cấu hình hiệu năng, bật nén phản hồi, cache tài nguyên tĩnh và tối ưu chỉ mục cơ sở dữ liệu.',
         };
     }
 
@@ -54,6 +60,8 @@ enum ModuleKey: string
             self::CATEGORIES_TAGS => '🏷️',
             self::HARNESS => '🤖',
             self::WORKERS => '⚙️',
+            self::ANALYTICS => '📈',
+            self::PERFORMANCE => '⚡',
         };
     }
 

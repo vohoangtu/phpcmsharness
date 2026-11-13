@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Container;
 
+use App\Application\Extension\ExtensionContext;
+use App\Application\Extension\ExtensionProviderInterface;
+use App\Application\Extension\ExtensionCatalog;
+use App\Application\Extension\HookRegistry;
+use App\Application\Extension\RoutableExtensionProviderInterface;
 use App\Application\Service\AuthService;
+use App\Application\Service\AiAssistantService;
 use App\Application\Service\CartService;
 use App\Application\Service\CommentService;
 use App\Application\Service\MediaService;
@@ -18,6 +24,7 @@ use App\Application\Service\TaxonomyService;
 use App\Application\Service\TuzygentHarnessService;
 use App\Application\Service\WorkerService;
 use App\Domain\Port\Outbound\CartPort;
+use App\Domain\Port\Outbound\AnalyticsReportPort;
 use App\Domain\Port\Outbound\AuthenticationSessionPort;
 use App\Domain\Port\Outbound\CategoryRepositoryPort;
 use App\Domain\Port\Outbound\CommentRepositoryPort;
@@ -37,6 +44,7 @@ use App\Domain\Port\Outbound\TransactionPort;
 use App\Domain\Port\Outbound\UserRepositoryPort;
 use App\Domain\Port\Outbound\WorkerJobQueuePort;
 use App\Infrastructure\Persistence\Sqlite\DatabaseManager;
+use App\Infrastructure\Analytics\GoogleAnalyticsDataAdapter;
 use App\Infrastructure\Persistence\Sqlite\SqliteCategoryRepository;
 use App\Infrastructure\Persistence\Sqlite\SqliteCommentRepository;
 use App\Infrastructure\Persistence\Sqlite\SqliteHarnessRepository;
@@ -56,6 +64,8 @@ use App\Infrastructure\Persistence\Sqlite\SqliteWorkerJobQueue;
 use App\Infrastructure\Session\PhpSessionCartAdapter;
 use App\Infrastructure\Session\PhpAuthenticationSessionAdapter;
 use App\Infrastructure\Storage\LocalMediaStorageAdapter;
+use App\Presentation\Http\Router;
+use App\Presentation\View\ViewRenderer;
 use PDO;
 use RuntimeException;
 
@@ -71,6 +81,8 @@ final class Container
 
     /** @var array<string, object> */
     private array $instances = [];
+    /** @var list<ExtensionProviderInterface> */
+    private array $extensionProviders = [];
 
     /**
      * @param array<string, mixed> $config
@@ -79,6 +91,47 @@ final class Container
         private readonly array $config
     ) {
         $this->registerBindings();
+        $this->loadExtensions();
+    }
+
+    /** @param callable(self):object $factory */
+    public function registerExtensionFactory(string $id, callable $factory): void
+    {
+        if (!preg_match('/^extension\.[a-z0-9_.-]{2,120}$/', $id)) {
+            throw new RuntimeException('Extension service ID phải có tiền tố extension. và dùng ký tự an toàn.');
+        }
+        if (isset($this->factories[$id]) || isset($this->instances[$id])) {
+            throw new RuntimeException(sprintf('Extension service [%s] đã được đăng ký.', $id));
+        }
+        $this->factories[$id] = $factory;
+    }
+
+    public function registerExtensionRoutes(Router $router, ViewRenderer $view): void
+    {
+        foreach ($this->extensionProviders as $provider) {
+            if ($provider instanceof RoutableExtensionProviderInterface) $provider->registerRoutes($router, $view);
+        }
+    }
+
+    private function loadExtensions(): void
+    {
+        $providers = ExtensionCatalog::normalize($this->config['extension_providers'] ?? []);
+        $settings = $this->get(SettingRepositoryPort::class);
+        $context = new ExtensionContext($this, $this->get(HookRegistry::class));
+        foreach ($providers as $manifest) {
+            if ($settings->get('extension_enabled_' . $manifest['id'], '1') !== '1') continue;
+            $providerClass = $manifest['provider'];
+            if (!class_exists($providerClass)) {
+                error_log(sprintf('Enabled extension "%s" provider class is missing.', $manifest['id']));
+                continue;
+            }
+            $provider = new $providerClass();
+            if (!$provider instanceof ExtensionProviderInterface) {
+                throw new RuntimeException(sprintf('Extension provider [%s] phải triển khai ExtensionProviderInterface.', $providerClass));
+            }
+            $provider->register($context);
+            $this->extensionProviders[] = $provider;
+        }
     }
 
     /**
@@ -106,6 +159,7 @@ final class Container
 
     private function registerBindings(): void
     {
+        $this->factories[HookRegistry::class] = fn() => new HookRegistry();
         // Database Connection
         $this->factories[PDO::class] = fn(): PDO => (new DatabaseManager($this->config))->getConnection();
 
@@ -126,6 +180,7 @@ final class Container
         $this->factories[WorkerJobQueuePort::class] = fn(self $c) => new SqliteWorkerJobQueue($c->get(PDO::class));
         $this->factories[LoginAttemptRepositoryPort::class] = fn(self $c) => new SqliteLoginAttemptRepository($c->get(PDO::class));
         $this->factories[TransactionPort::class] = fn(self $c) => new SqliteTransactionAdapter($c->get(PDO::class));
+        $this->factories[AnalyticsReportPort::class] = fn() => new GoogleAnalyticsDataAdapter();
 
         $this->factories[MediaStoragePort::class] = fn() => new LocalMediaStorageAdapter(
             (string) ($this->config['uploads_path'] ?? dirname(__DIR__, 3) . '/public/uploads'),
@@ -140,11 +195,13 @@ final class Container
         );
         $this->factories[PostService::class] = fn(self $c) => new PostService(
             $c->get(PostRepositoryPort::class),
-            $c->get(TagRepositoryPort::class)
+            $c->get(TagRepositoryPort::class),
+            $c->get(HookRegistry::class)
         );
         $this->factories[ProductService::class] = fn(self $c) => new ProductService(
             $c->get(ProductRepositoryPort::class),
-            $c->get(TagRepositoryPort::class)
+            $c->get(TagRepositoryPort::class),
+            $c->get(HookRegistry::class)
         );
         $this->factories[CartService::class] = fn(self $c) => new CartService(
             $c->get(ProductRepositoryPort::class),
@@ -159,7 +216,8 @@ final class Container
             $c->get(ProductRepositoryPort::class),
             $c->get(CartPort::class),
             $c->get(TransactionPort::class),
-            $c->get(OrderOperationsPort::class)
+            $c->get(OrderOperationsPort::class),
+            $c->get(HookRegistry::class)
         );
         $this->factories[OrderQueryService::class] = fn(self $c) => new OrderQueryService(
             $c->get(OrderRepositoryPort::class)
@@ -172,12 +230,16 @@ final class Container
         );
         $this->factories[MediaService::class] = fn(self $c) => new MediaService(
             $c->get(MediaRepositoryPort::class),
-            $c->get(MediaStoragePort::class)
+            $c->get(MediaStoragePort::class),
+            $c->get(HookRegistry::class)
         );
         $this->factories[AuthService::class] = fn(self $c) => new AuthService(
             $c->get(UserRepositoryPort::class),
             $c->get(AuthenticationSessionPort::class),
             $c->get(LoginAttemptRepositoryPort::class)
+        );
+        $this->factories[AiAssistantService::class] = fn() => new AiAssistantService(
+            (string)($this->config['base_path'] ?? dirname(__DIR__, 3))
         );
         $this->factories[TuzygentHarnessService::class] = fn(self $c) => new TuzygentHarnessService(
             $c->get(HarnessRepositoryPort::class),
@@ -187,7 +249,8 @@ final class Container
             $c->get(WorkerJobQueuePort::class),
             $c->get(ModuleRegistryPort::class),
             (string) ($this->config['base_path'] ?? dirname(__DIR__, 3)),
-            $c->get(TuzygentHarnessService::class)
+            $c->get(TuzygentHarnessService::class),
+            $c->get(AiAssistantService::class)
         );
     }
 }

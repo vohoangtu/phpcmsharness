@@ -66,7 +66,10 @@ final class BlogController extends BaseController
 
         $this->view->renderFrontend('frontend/blog/show', [
             'pageTitle' => $post->title,
-            'metaDescription' => $post->excerpt,
+            'seoTitle' => $post->seoTitle !== '' ? $post->seoTitle : $post->title,
+            'metaDescription' => $post->seoDescription !== '' ? $post->seoDescription : $post->excerpt,
+            'ogType' => 'article',
+            'ogImage' => $post->featuredImage,
             'post' => $post,
             'featuredImageWidth' => $featuredMedia?->width,
             'featuredImageHeight' => $featuredMedia?->height,

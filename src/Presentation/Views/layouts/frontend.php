@@ -23,6 +23,15 @@ $metaDescription = isset($metaDescription) && is_string($metaDescription) ? trim
 if ($metaDescription === '') {
     $metaDescription = trim($descriptionTitle . ($rawSiteTagline !== '' ? ' — ' . $rawSiteTagline : ''));
 }
+$seoTitle = isset($seoTitle) && is_string($seoTitle) && trim($seoTitle) !== '' ? trim($seoTitle) : (string)($pageTitle ?? 'Trang chủ');
+$baseUrl = rtrim(trim((string)($settings['site_url'] ?? '')), '/');
+$requestPath = parse_url($currentUri ?? '/', PHP_URL_PATH) ?: '/';
+$canonicalUrl = isset($canonicalUrl) && is_string($canonicalUrl) && $canonicalUrl !== ''
+    ? $canonicalUrl
+    : ($baseUrl !== '' ? $baseUrl . '/' . ltrim($requestPath, '/') : '');
+$ogImage = isset($ogImage) && is_string($ogImage) ? trim($ogImage) : '';
+if ($ogImage !== '' && !preg_match('#^https?://#i', $ogImage) && $baseUrl !== '') $ogImage = $baseUrl . '/' . ltrim($ogImage, '/');
+$ogType = isset($ogType) && in_array($ogType, ['article', 'product'], true) ? $ogType : 'website';
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -30,8 +39,20 @@ if ($metaDescription === '') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES, 'UTF-8') ?>">
-    <title><?= htmlspecialchars($pageTitle ?? 'Trang chủ') ?> — <?= $siteTitle ?></title>
-    <link rel="stylesheet" href="/assets/css/frontend.css">
+    <meta name="robots" content="index,follow,max-image-preview:large">
+    <?php if ($canonicalUrl !== ''): ?><link rel="canonical" href="<?= htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
+    <meta property="og:locale" content="vi_VN"><meta property="og:site_name" content="<?= $siteTitle ?>"><meta property="og:type" content="<?= htmlspecialchars($ogType, ENT_QUOTES, 'UTF-8') ?>">
+    <meta property="og:title" content="<?= htmlspecialchars($seoTitle, ENT_QUOTES, 'UTF-8') ?>"><meta property="og:description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES, 'UTF-8') ?>">
+    <?php if ($canonicalUrl !== ''): ?><meta property="og:url" content="<?= htmlspecialchars($canonicalUrl, ENT_QUOTES, 'UTF-8') ?>"><?php endif; ?>
+    <?php if ($ogImage !== ''): ?><meta property="og:image" content="<?= htmlspecialchars($ogImage, ENT_QUOTES, 'UTF-8') ?>"><meta name="twitter:card" content="summary_large_image"><?php else: ?><meta name="twitter:card" content="summary">
+    <?php endif; ?><meta name="twitter:title" content="<?= htmlspecialchars($seoTitle, ENT_QUOTES, 'UTF-8') ?>"><meta name="twitter:description" content="<?= htmlspecialchars($metaDescription, ENT_QUOTES, 'UTF-8') ?>">
+    <title><?= htmlspecialchars($seoTitle) ?> — <?= $siteTitle ?></title>
+    <?php $ga4MeasurementId = trim((string)($settings['ga4_measurement_id'] ?? '')); if (!empty($enabledModules['analytics']) && preg_match('/^G-[A-Z0-9]+$/', $ga4MeasurementId)): ?>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=<?= htmlspecialchars($ga4MeasurementId, ENT_QUOTES, 'UTF-8') ?>"></script>
+    <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config',<?= json_encode($ga4MeasurementId, JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>);</script>
+    <?php endif; ?>
+    <link rel="stylesheet" href="/assets/css/frontend.css?v=20261113-ai">
+    <?= isset($extensionHeadMarkup) && is_string($extensionHeadMarkup) ? $extensionHeadMarkup : '' ?>
 </head>
 <body>
     <?php if (!empty($currentUser)): ?>
@@ -75,13 +96,13 @@ if ($metaDescription === '') {
                 </div>
             </a>
 
-            <nav class="fe-nav">
-                <a href="/" class="<?= $currentUri === '/' ? 'active' : '' ?>">Trang chủ</a>
+            <nav class="fe-nav" aria-label="Điều hướng chính">
+                <a href="/" class="<?= $currentUri === '/' ? 'active' : '' ?>" <?= $currentUri === '/' ? 'aria-current="page"' : '' ?>>⌂ <span>Trang chủ</span></a>
                 <?php if (!empty($enabledModules['products'])): ?>
-                    <a href="/shop" class="<?= str_starts_with($currentUri, '/shop') || str_starts_with($currentUri, '/product/') ? 'active' : '' ?>">🛍️ Cửa hàng</a>
+                    <a href="/shop" class="<?= str_starts_with($currentUri, '/shop') || str_starts_with($currentUri, '/product/') ? 'active' : '' ?>" <?= str_starts_with($currentUri, '/shop') || str_starts_with($currentUri, '/product/') ? 'aria-current="page"' : '' ?>>🛍️ <span>Cửa hàng</span></a>
                 <?php endif; ?>
                 <?php if (!empty($enabledModules['posts'])): ?>
-                    <a href="/blog" class="<?= str_starts_with($currentUri, '/blog') || str_starts_with($currentUri, '/post/') ? 'active' : '' ?>">📝 Bài viết &amp; Tin tức</a>
+                    <a href="/blog" class="<?= str_starts_with($currentUri, '/blog') || str_starts_with($currentUri, '/post/') ? 'active' : '' ?>" <?= str_starts_with($currentUri, '/blog') || str_starts_with($currentUri, '/post/') ? 'aria-current="page"' : '' ?>>📝 <span>Bài viết</span></a>
                 <?php endif; ?>
                 <?php if (!empty($enabledModules['products']) && !empty($enabledModules['orders'])): ?>
                     <a href="/cart" class="fe-cart-btn">

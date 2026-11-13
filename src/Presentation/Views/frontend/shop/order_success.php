@@ -14,3 +14,8 @@ declare(strict_types=1);
     <a href="/shop" class="fe-btn fe-btn-primary">Tiếp tục mua sắm</a>
     <a href="/" class="fe-btn fe-btn-secondary">Về trang chủ</a>
 </div>
+<?php if (!empty($settings['ga4_measurement_id'])): ?>
+<script>
+if(typeof gtag==='function')gtag('event','purchase',{transaction_id:<?= json_encode($order->orderCode, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT) ?>,value:<?= (int)$order->totalAmount ?>,currency:'VND',items:[<?php foreach ($order->items as $i => $item): ?><?= $i ? ',' : '' ?>{item_id:<?= json_encode((string)$item->productId, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT) ?>,item_name:<?= json_encode($item->productName, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT) ?>,price:<?= (int)$item->unitPrice ?>,quantity:<?= (int)$item->quantity ?>}<?php endforeach; ?>]});
+</script>
+<?php endif; ?>

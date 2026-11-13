@@ -50,6 +50,12 @@ final class DatabaseManager
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ]);
             $this->pdo->exec('PRAGMA foreign_keys = ON;');
+            $this->pdo->exec('PRAGMA busy_timeout = 5000;');
+            if (strtolower((string)$this->pdo->query('PRAGMA journal_mode')->fetchColumn()) !== 'wal') {
+                $this->pdo->exec('PRAGMA journal_mode = WAL;');
+            }
+            $this->pdo->exec('PRAGMA synchronous = NORMAL;');
+            $this->pdo->exec('PRAGMA cache_size = -20000;');
 
             if ($isNew) {
                 $this->migrateAndSeed($this->pdo);
@@ -59,6 +65,8 @@ final class DatabaseManager
             }
             $this->ensureMediaDimensions($this->pdo);
             $this->ensureOrderOperations($this->pdo);
+            $this->ensureSeoMetadata($this->pdo);
+            $this->ensurePerformanceIndexes($this->pdo);
         }
 
         return $this->pdo;
@@ -177,6 +185,8 @@ final class DatabaseManager
                 title TEXT NOT NULL,
                 slug TEXT NOT NULL UNIQUE,
                 excerpt TEXT NOT NULL DEFAULT "",
+                seo_title TEXT NOT NULL DEFAULT "",
+                seo_description TEXT NOT NULL DEFAULT "",
                 content TEXT NOT NULL DEFAULT "",
                 featured_image TEXT NOT NULL DEFAULT "",
                 status TEXT NOT NULL DEFAULT "published",
@@ -202,6 +212,8 @@ final class DatabaseManager
                 slug TEXT NOT NULL UNIQUE,
                 sku TEXT NOT NULL,
                 short_description TEXT NOT NULL DEFAULT "",
+                seo_title TEXT NOT NULL DEFAULT "",
+                seo_description TEXT NOT NULL DEFAULT "",
                 description TEXT NOT NULL DEFAULT "",
                 price REAL NOT NULL DEFAULT 0,
                 sale_price REAL NULL,
@@ -290,6 +302,7 @@ final class DatabaseManager
         // Seed Settings
         $defaultSettings = [
             'site_title' => 'WP-Hexagon CMS & Store',
+            'site_url' => (string) ($this->config['site_url'] ?? ''),
             'site_tagline' => 'Hệ thống Quản trị Bài viết & Sản phẩm theo kiến trúc Hexagonal (Ports & Adapters)',
             'contact_email' => 'contact@wp-hexagon.local',
             'contact_phone' => '0901 234 567',
@@ -506,5 +519,32 @@ final class DatabaseManager
         if (!in_array('tags', $columnNames, true)) $pdo->exec("ALTER TABLE media ADD COLUMN tags TEXT NOT NULL DEFAULT ''");
         if (!in_array('last_used_at', $columnNames, true)) $pdo->exec('ALTER TABLE media ADD COLUMN last_used_at TEXT NULL');
         if (!in_array('use_count', $columnNames, true)) $pdo->exec('ALTER TABLE media ADD COLUMN use_count INTEGER NOT NULL DEFAULT 0');
+    }
+
+    private function ensureSeoMetadata(PDO $pdo): void
+    {
+        foreach (['posts' => ['seo_title', 'seo_description'], 'products' => ['seo_title', 'seo_description']] as $table => $columns) {
+            $existing = array_column($pdo->query('PRAGMA table_info(' . $table . ')')->fetchAll(PDO::FETCH_ASSOC), 'name');
+            foreach ($columns as $column) {
+                if (!in_array($column, $existing, true)) $pdo->exec('ALTER TABLE ' . $table . ' ADD COLUMN ' . $column . ' TEXT NOT NULL DEFAULT ""');
+            }
+        }
+        $stmt = $pdo->prepare('INSERT OR IGNORE INTO settings (setting_key, setting_value) VALUES (?, ?)');
+        $stmt->execute(['site_url', (string) ($this->config['site_url'] ?? '')]);
+        if ((string)($this->config['site_url'] ?? '') !== '') {
+            $pdo->prepare("UPDATE settings SET setting_value = ? WHERE setting_key = 'site_url' AND setting_value = ''")
+                ->execute([(string)$this->config['site_url']]);
+        }
+    }
+
+    private function ensurePerformanceIndexes(PDO $pdo): void
+    {
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_status_created ON posts(status, created_at DESC)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_posts_category_status ON posts(category_id, status)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_products_status_created ON products(status, created_at DESC)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_products_category_status ON products(category_id, status)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_media_folder_created ON media(folder_id, created_at DESC)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_orders_status_created ON orders(status, created_at DESC)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_comments_status_created ON comments(status, created_at DESC)');
     }
 }

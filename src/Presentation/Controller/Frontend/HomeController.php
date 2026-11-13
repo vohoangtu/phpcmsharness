@@ -9,6 +9,7 @@ use App\Application\Service\PostService;
 use App\Application\Service\ProductService;
 use App\Domain\Enum\ContentStatus;
 use App\Domain\Enum\ModuleKey;
+use App\Domain\Port\Outbound\SettingRepositoryPort;
 use App\Presentation\Controller\BaseController;
 
 final class HomeController extends BaseController
@@ -27,10 +28,20 @@ final class HomeController extends BaseController
             ? $postService->listPosts(ContentStatus::PUBLISHED, null, '', 4)
             : [];
 
+        $settings = $this->container->get(SettingRepositoryPort::class)->getAll();
+        $homeSlider = json_decode((string)($settings['home_slider_config'] ?? ''), true);
+        if (!is_array($homeSlider)) $homeSlider = [];
+        $homeSlider['slides'] = array_values(array_filter(
+            is_array($homeSlider['slides'] ?? null) ? $homeSlider['slides'] : [],
+            static fn($slide): bool => is_array($slide) && !empty($slide['enabled']) && is_string($slide['image'] ?? null) && trim($slide['image']) !== ''
+        ));
+        $homeSlider['enabled'] = !empty($homeSlider['enabled']) && $homeSlider['slides'] !== [];
+
         $this->view->renderFrontend('frontend/home', [
             'pageTitle' => 'Trang chủ',
             'featuredProducts' => $featuredProducts,
             'latestPosts' => $latestPosts,
+            'homeSlider' => $homeSlider,
         ]);
     }
 }

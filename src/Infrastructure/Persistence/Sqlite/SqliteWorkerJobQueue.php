@@ -47,6 +47,14 @@ final readonly class SqliteWorkerJobQueue implements WorkerJobQueuePort
         return (bool) $stmt->fetchColumn();
     }
 
+    public function get(int $id): ?WorkerJob
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM worker_jobs WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return is_array($row) ? $this->hydrate($row) : null;
+    }
+
     public function claimNext(): ?WorkerJob
     {
         $this->pdo->exec('BEGIN IMMEDIATE');

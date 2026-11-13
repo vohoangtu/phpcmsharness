@@ -17,7 +17,7 @@ declare(strict_types=1);
     </div>
 </div>
 
-<div class="wp-editor-layout">
+<div class="wp-editor-layout taxonomy-category-layout">
     <!-- Left Form (Giống WordPress Categories) -->
     <div class="wp-editor-sidebar">
         <div class="wp-card">
@@ -55,7 +55,8 @@ declare(strict_types=1);
     <!-- Right Table -->
     <div class="wp-editor-main">
         <div class="wp-card">
-            <table class="wp-table">
+            <div class="taxonomy-category-table-wrap">
+            <table class="wp-table taxonomy-category-table">
                 <thead>
                     <tr>
                         <th>Tên danh mục</th>
@@ -84,6 +85,7 @@ declare(strict_types=1);
                     <?php endforeach; ?>
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>

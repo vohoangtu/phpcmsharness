@@ -17,13 +17,18 @@ final readonly class WorkerService
         private ModuleRegistryPort $modules,
         private string $basePath,
         private TuzygentHarnessService $harness,
+        private AiAssistantService $aiAssistant,
     ) {}
 
     /** @param array<string, mixed> $payload */
     public function enqueue(string $type, array $payload): int
     {
         if (!$this->modules->isEnabled(ModuleKey::WORKERS)) throw new RuntimeException('Workers đang tắt; không thể nhận job mới.');
-        if ($type !== 'harness_task' || (int)($payload['task_id'] ?? 0) < 1) throw new RuntimeException('Loại job hoặc payload không hợp lệ.');
+        if ($type === 'harness_task' && (int)($payload['task_id'] ?? 0) < 1) throw new RuntimeException('Payload Harness không hợp lệ.');
+        if ($type === 'ai_assistant' && (!in_array($payload['action'] ?? '', ['post_seo', 'product_seo', 'keyword_ideas', 'content_audit', 'article_draft', 'analytics_insights'], true) || !isset($payload['owner_id']) || !is_array($payload['context'] ?? null))) throw new RuntimeException('Payload AI không hợp lệ.');
+        if (!in_array($type, ['harness_task', 'ai_assistant'], true)) throw new RuntimeException('Loại job không được hỗ trợ.');
+        $this->prepareWorkerRuntime();
+        if (!$this->status()['active']) $this->assertCanLaunchWorker();
         $id = $this->queue->enqueue($type, $payload);
         $this->startWorker();
         return $id;
@@ -31,6 +36,7 @@ final readonly class WorkerService
 
     /** @return WorkerJob[] */
     public function listJobs(): array { return $this->queue->list(); }
+    public function getJob(int $id): ?WorkerJob { return $this->queue->get($id); }
     public function hasActiveHarnessTask(int $taskId): bool
     {
         return $this->queue->hasActiveHarnessTask($taskId);
@@ -78,6 +84,11 @@ final readonly class WorkerService
             }
             $idleChecks = 0;
             try {
+                if ($job->type === 'ai_assistant') {
+                    $result = $this->aiAssistant->processJob($job->payload);
+                    $this->queue->finish((int)$job->id, 'completed', $result, null);
+                    continue;
+                }
                 if ($job->type !== 'harness_task') throw new RuntimeException('Không có handler cho loại job này.');
                 $task = $this->harness->executeTask((int)($job->payload['task_id'] ?? 0));
                 $result = json_encode(['task_id'=>$task->id,'task_code'=>$task->taskCode,'status'=>$task->status->value,'attempts'=>$task->attempts,'snapshot_id'=>$task->snapshotId,'files_changed'=>$task->filesChanged,'verification_output'=>$task->verificationOutput], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
@@ -94,6 +105,25 @@ final readonly class WorkerService
 
     private function startWorker(): void
     {
+        $this->prepareWorkerRuntime();
+        if ($this->status()['active']) return;
+        $this->assertCanLaunchWorker();
+        $path = $this->basePath . '/storage/workers';
+        $tokenPath = $this->tokenPath();
+        $cli = PHP_BINDIR . '/php';
+        $php = escapeshellarg(is_executable($cli) ? $cli : 'php');
+        $script = escapeshellarg($this->basePath . '/bin/worker.php');
+        if (!is_file($tokenPath) || trim((string) file_get_contents($tokenPath)) === '') throw new RuntimeException('Không thể tạo token Workers.');
+        $tokenFile = escapeshellarg($tokenPath);
+        if (is_file($path . '/worker.log') && filesize($path . '/worker.log') > 1048576) @rename($path . '/worker.log', $path . '/worker.log.1');
+        $logFile = escapeshellarg($path . '/worker.log');
+        // The lock keeps concurrency at one even when several requests launch the CLI simultaneously.
+        $command = "$php $script < $tokenFile >> $logFile 2>&1 &";
+        exec($command);
+    }
+
+    private function prepareWorkerRuntime(): void
+    {
         $path = $this->basePath . '/storage/workers';
         if (!is_dir($path) && !mkdir($path, 0770, true) && !is_dir($path)) throw new RuntimeException('Không thể tạo thư mục Workers.');
         $tokenPath = $this->tokenPath();
@@ -105,16 +135,16 @@ final readonly class WorkerService
                 @chmod($tokenPath, 0600);
             }
         }
-        $cli = PHP_BINDIR . '/php';
-        $php = escapeshellarg(is_executable($cli) ? $cli : 'php');
-        $script = escapeshellarg($this->basePath . '/bin/worker.php');
-        if (!is_file($tokenPath) || trim((string) file_get_contents($tokenPath)) === '') throw new RuntimeException('Không thể tạo token Workers.');
-        $tokenFile = escapeshellarg($tokenPath);
-        if (is_file($path . '/worker.log') && filesize($path . '/worker.log') > 1048576) @rename($path . '/worker.log', $path . '/worker.log.1');
-        $logFile = escapeshellarg($path . '/worker.log');
-        // The lock keeps concurrency at one even when several requests launch the CLI simultaneously.
-        $command = "$php $script < $tokenFile >> $logFile 2>&1 &";
-        exec($command);
+        if (!is_file($tokenPath) || trim((string) @file_get_contents($tokenPath)) === '') throw new RuntimeException('Không thể tạo token Workers.');
+        if (!is_file($this->basePath . '/bin/worker.php')) throw new RuntimeException('Không tìm thấy CLI worker tại bin/worker.php.');
+    }
+
+    private function assertCanLaunchWorker(): void
+    {
+        $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
+        if (!function_exists('exec') || in_array('exec', $disabled, true)) {
+            throw new RuntimeException('Máy chủ PHP đang tắt exec nên không thể tự khởi chạy Worker. Hãy bật exec cho PHP web hoặc chạy Worker bằng Supervisor/systemd trước khi gửi yêu cầu.');
+        }
     }
 
     private function tokenPath(): string { return $this->basePath . '/storage/workers/internal.token'; }

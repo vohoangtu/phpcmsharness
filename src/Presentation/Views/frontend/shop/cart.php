@@ -101,3 +101,8 @@ declare(strict_types=1);
         </div>
     </div>
 <?php endif; ?>
+<?php if (!empty($settings['ga4_measurement_id']) && !empty($cartData['items'])): ?>
+<script>
+document.querySelector('.fe-checkout-box form')?.addEventListener('submit',function(){if(typeof gtag==='function')gtag('event','begin_checkout',{currency:'VND',value:<?= (int)$cartData['total'] ?>,items:[<?php foreach ($cartData['items'] as $i=>$row): ?><?= $i ? ',' : '' ?>{item_id:<?= json_encode((string)$row['product']->sku, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT) ?>,item_name:<?= json_encode($row['product']->name, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_AMP|JSON_HEX_QUOT) ?>,price:<?= (int)$row['product']->effectivePrice() ?>,quantity:<?= (int)$row['quantity'] ?>}<?php endforeach; ?>]});});
+</script>
+<?php endif; ?>

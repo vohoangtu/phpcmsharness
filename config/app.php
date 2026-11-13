@@ -9,6 +9,8 @@ return [
     'storage_path' => dirname(__DIR__) . '/storage',
     'uploads_path' => dirname(__DIR__) . '/public/uploads',
     'uploads_url' => '/uploads',
+    // Only trusted, Composer-autoloaded provider manifests listed here are executed at startup.
+    'extension_providers' => require __DIR__ . '/extensions.php',
     'db' => [
         'driver' => 'sqlite',
         'sqlite_path' => dirname(__DIR__) . '/storage/database.sqlite',

@@ -200,8 +200,8 @@ final readonly class SqliteProductRepository implements ProductRepositoryPort
 
         if ($product->id === null) {
             $stmt = $this->pdo->prepare('
-                INSERT INTO products (name, slug, sku, short_description, description, price, sale_price, stock_quantity, featured_image, gallery_images, status, category_id, is_featured, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO products (name, slug, sku, short_description, description, price, sale_price, stock_quantity, featured_image, gallery_images, status, category_id, is_featured, created_at, updated_at, seo_title, seo_description)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ');
             $stmt->execute([
                 $product->name,
@@ -219,13 +219,15 @@ final readonly class SqliteProductRepository implements ProductRepositoryPort
                 $product->isFeatured ? 1 : 0,
                 $now,
                 $now,
+                $product->seoTitle,
+                $product->seoDescription,
             ]);
             return (int) $this->pdo->lastInsertId();
         }
 
         $stmt = $this->pdo->prepare('
             UPDATE products
-            SET name = ?, slug = ?, sku = ?, short_description = ?, description = ?, price = ?, sale_price = ?, stock_quantity = ?, featured_image = ?, gallery_images = ?, status = ?, category_id = ?, is_featured = ?, updated_at = ?
+            SET name = ?, slug = ?, sku = ?, short_description = ?, description = ?, price = ?, sale_price = ?, stock_quantity = ?, featured_image = ?, gallery_images = ?, status = ?, category_id = ?, is_featured = ?, updated_at = ?, seo_title = ?, seo_description = ?
             WHERE id = ?
         ');
         $stmt->execute([
@@ -243,6 +245,8 @@ final readonly class SqliteProductRepository implements ProductRepositoryPort
             $product->categoryId,
             $product->isFeatured ? 1 : 0,
             $now,
+            $product->seoTitle,
+            $product->seoDescription,
             $product->id,
         ]);
         return $product->id;
@@ -339,7 +343,9 @@ final readonly class SqliteProductRepository implements ProductRepositoryPort
             isFeatured: (bool) ((int) $row['is_featured']),
             tags: $tags,
             createdAt: (string) $row['created_at'],
-            updatedAt: (string) $row['updated_at']
+            updatedAt: (string) $row['updated_at'],
+            seoTitle: (string) ($row['seo_title'] ?? ''),
+            seoDescription: (string) ($row['seo_description'] ?? '')
         );
     }
 }

@@ -13,6 +13,7 @@ $productDescription = $product->description ?? '<p>Thông số kỹ thuật và 
 <div class="wp-page-header">
     <div>
         <h1 class="wp-page-title"><?= $isEdit ? '✏️ Chỉnh sửa Sản phẩm' : '🛍️ Thêm Sản phẩm mới' ?></h1>
+        <p class="wp-page-subtitle">Quản lý giá, kho hàng, nội dung, hình ảnh và SEO sản phẩm.</p>
     </div>
     <div class="wp-header-actions">
         <?php if ($isEdit): ?>
@@ -95,11 +96,10 @@ $productDescription = $product->description ?? '<p>Thông số kỹ thuật và 
             <label id="product-description-label" for="raw-content">Mô tả chi tiết sản phẩm</label>
             <div class="wp-rich-text-editor" data-rich-text-editor data-source-id="raw-content">
                 <div class="wp-editor-toolbar" data-rich-text-toolbar role="toolbar" aria-label="Công cụ định dạng mô tả sản phẩm">
-                    <button type="button" data-editor-command="bold"><b>B</b></button><button type="button" data-editor-command="italic"><i>I</i></button><button type="button" data-editor-command="underline"><u>U</u></button><button type="button" data-editor-command="strike"><s>S</s></button>
-                    <select data-editor-command="heading" aria-label="Kiểu tiêu đề"><option value="p">Đoạn văn</option><option value="h2">Tiêu đề 2</option><option value="h3">Tiêu đề 3</option><option value="h4">Tiêu đề 4</option></select>
-                    <button type="button" data-editor-command="bulletList">• Danh sách</button><button type="button" data-editor-command="orderedList">1. Danh sách</button><button type="button" data-editor-command="blockquote">Trích dẫn</button>
-                    <button type="button" data-editor-command="link">🔗 Link</button><button type="button" data-editor-command="unlink">Bỏ link</button><button type="button" data-editor-command="insertTable">▦ Bảng</button><button type="button" data-editor-command="addRow">＋ Hàng</button><button type="button" data-editor-command="deleteTable">Xóa bảng</button>
-                    <button type="button" data-editor-command="image" title="Chọn ảnh, sau đó kéo nút ở góc để đổi kích thước">🖼 Ảnh</button><button type="button" data-editor-command="youtube">▶ Video</button><button type="button" data-editor-command="alignLeft">≡</button><button type="button" data-editor-command="alignCenter">☰</button><button type="button" data-editor-command="alignRight">≡</button><button type="button" data-editor-command="undo">↶</button><button type="button" data-editor-command="redo">↷</button><button type="button" data-editor-command="source" class="wp-toolbar-right">&lt;/&gt; HTML</button>
+                    <div class="wp-toolbar-group" aria-label="Kiểu chữ"><button type="button" data-editor-command="bold"><b>B</b></button><button type="button" data-editor-command="italic"><i>I</i></button><button type="button" data-editor-command="underline"><u>U</u></button><button type="button" data-editor-command="strike"><s>S</s></button><select data-editor-font-family aria-label="Phông chữ"><option value="">Phông chữ</option><option value="Arial, sans-serif">Arial</option><option value="Georgia, serif">Georgia</option><option value="'Times New Roman', serif">Times New Roman</option><option value="Verdana, sans-serif">Verdana</option></select><select data-editor-font-size aria-label="Cỡ chữ"><option value="">Cỡ chữ</option><option value="12px">12</option><option value="14px">14</option><option value="16px">16</option><option value="18px">18</option><option value="24px">24</option><option value="32px">32</option></select></div>
+                    <div class="wp-toolbar-group" aria-label="Định dạng đoạn"><select data-editor-command="heading" aria-label="Kiểu tiêu đề"><option value="p">Đoạn văn</option><option value="h2">Tiêu đề 2</option><option value="h3">Tiêu đề 3</option><option value="h4">Tiêu đề 4</option></select><button type="button" data-editor-command="bulletList">• Danh sách</button><button type="button" data-editor-command="orderedList">1. Danh sách</button><button type="button" data-editor-command="blockquote">Trích dẫn</button><button type="button" data-editor-command="alignLeft">☰</button><button type="button" data-editor-command="alignCenter">≡</button><button type="button" data-editor-command="alignRight">☷</button></div>
+                    <div class="wp-toolbar-group" aria-label="Chèn nội dung"><button type="button" data-editor-command="link">🔗 Liên kết</button><button type="button" data-editor-command="unlink">Bỏ link</button><button type="button" data-editor-command="insertTable">▦ Bảng</button><button type="button" data-editor-command="addRow">＋ Hàng</button><button type="button" data-editor-command="deleteTable">Xóa bảng</button><button type="button" data-editor-command="image" title="Chọn ảnh từ Media Library; kéo góc ảnh để đổi kích thước">🖼 Ảnh</button><button type="button" data-editor-command="youtube">▶ Video</button></div>
+                    <div class="wp-toolbar-group" aria-label="Màu và hoàn tác"><label class="wp-editor-color" title="Màu chữ">A <input type="color" data-editor-color value="#303754" aria-label="Màu chữ"></label><label class="wp-editor-color" title="Tô sáng">▰ <input type="color" data-editor-highlight value="#fff2a8" aria-label="Màu nền chữ"></label><button type="button" data-editor-command="clearFormatting" title="Xóa định dạng">Tx</button><button type="button" data-editor-command="undo">↶</button><button type="button" data-editor-command="redo">↷</button></div><span class="wp-editor-word-count" data-editor-word-count aria-live="polite"></span><button type="button" data-editor-command="source" class="wp-toolbar-right">&lt;/&gt; HTML</button>
                 </div>
                 <div id="visual-editor" class="wp-visual-editor" data-rich-text-surface role="textbox" aria-multiline="true" aria-labelledby="product-description-label" hidden></div>
             <textarea
@@ -112,6 +112,7 @@ $productDescription = $product->description ?? '<p>Thông số kỹ thuật và 
         </div>
 
         <div class="wp-card">
+            <div class="wp-card-header"><h2>✍️ Mô tả ngắn sản phẩm</h2></div>
             <div class="wp-form-group">
                 <label for="product-short-description">Mô tả ngắn (Short Description)</label>
                 <textarea name="short_description" id="product-short-description" rows="3" class="wp-textarea" placeholder="Hiển thị ngay cạnh giá sản phẩm..."><?= htmlspecialchars($product->shortDescription ?? '') ?></textarea>
@@ -130,14 +131,33 @@ $productDescription = $product->description ?? '<p>Thông số kỹ thuật và 
                 <textarea name="gallery_images" id="product-gallery-images" hidden><?= htmlspecialchars(implode("\n", $galleryImages)) ?></textarea>
             </div>
         </div>
+        <div class="wp-card wp-mb-20 seo-editor-card">
+            <div class="wp-card-header"><h2>🔎 SEO &amp; chia sẻ mạng xã hội</h2><div class="ai-assistant-actions"><button type="button" class="wp-btn wp-btn-secondary" data-ai-action="product_seo">✨ Gợi ý SEO</button><button type="button" class="wp-btn wp-btn-secondary" data-ai-action="content_audit">🔎 Phân tích nội dung</button><button type="button" class="wp-btn wp-btn-secondary" data-ai-action="keyword_ideas">🏷️ Nghiên cứu từ khóa</button></div></div>
+            <p class="wp-text-muted">Khi được yêu cầu, AI gửi tên, mô tả và thẻ sản phẩm tới provider đã cấu hình. Bạn duyệt đề xuất trước khi áp dụng.</p>
+            <div class="wp-form-group"><label for="product-seo-title">SEO title</label><input id="product-seo-title" name="seo_title" class="wp-input" maxlength="70" value="<?= htmlspecialchars($product->seoTitle ?? '') ?>" placeholder="Để trống để dùng tên sản phẩm"><small class="wp-text-muted">Tùy chọn · tối đa 70 ký tự.</small></div>
+            <div class="wp-form-group"><label for="product-seo-description">Meta description</label><textarea id="product-seo-description" name="seo_description" class="wp-textarea" rows="3" maxlength="160" placeholder="Để trống để dùng mô tả ngắn sản phẩm"><?= htmlspecialchars($product->seoDescription ?? '') ?></textarea><small class="wp-text-muted">Tùy chọn · tối đa 160 ký tự.</small></div>
+        </div>
     </div>
 
     <!-- Right Sidebar -->
     <div class="wp-editor-sidebar">
+        <div class="wp-card wp-mb-20 product-publish-card">
+            <div class="wp-card-header"><h2>📢 Xuất bản Sản phẩm</h2></div>
+            <div class="wp-form-group">
+                <label for="product-status">Trạng thái hiển thị</label>
+                <select name="status" id="product-status" class="wp-select">
+                    <option value="published" <?= ($product?->status->value ?? 'published') === 'published' ? 'selected' : '' ?>>Đang bán (Published)</option>
+                    <option value="draft" <?= ($product?->status->value ?? '') === 'draft' ? 'selected' : '' ?>>Bản nháp (Draft)</option>
+                    <option value="trash" <?= ($product?->status->value ?? '') === 'trash' ? 'selected' : '' ?>>Thùng rác (Trash)</option>
+                </select>
+            </div>
+            <button type="submit" class="wp-btn wp-btn-primary wp-btn-block">💾 <?= $isEdit ? 'Cập nhật Sản phẩm' : 'Đăng Sản phẩm' ?></button>
+        </div>
+
         <?php if (!empty($enabledModules['categories_tags'])): ?>
-            <div class="wp-card wp-mb-20">
+            <div class="wp-card wp-mb-20 product-taxonomy-card">
                 <div class="wp-card-header">
-                    <h2>📁 Danh mục sản phẩm</h2>
+                    <h2>📁 Phân loại &amp; từ khóa</h2>
                     <a href="/admin/categories?type=product" class="wp-link">+ Thêm mới</a>
                 </div>
                 <div class="wp-form-group">
@@ -150,12 +170,6 @@ $productDescription = $product->description ?? '<p>Thông số kỹ thuật và 
                             </option>
                         <?php endforeach; ?>
                     </select>
-                </div>
-            </div>
-
-            <div class="wp-card wp-mb-20">
-                <div class="wp-card-header">
-                    <h2>🏷️ Từ khóa / Thẻ sản phẩm</h2>
                 </div>
                 <div class="wp-form-group">
                     <label for="product-tags">Từ khóa / Thẻ sản phẩm</label>
@@ -201,22 +215,6 @@ $productDescription = $product->description ?? '<p>Thông số kỹ thuật và 
             <small class="wp-text-muted">JPG, PNG, GIF hoặc WEBP · tối đa 5 MiB mỗi ảnh.</small>
         </div>
 
-        <div class="wp-card wp-mb-20">
-            <div class="wp-card-header">
-                <h2>📢 Xuất bản Sản phẩm</h2>
-            </div>
-            <div class="wp-form-group">
-                <label for="product-status">Trạng thái hiển thị</label>
-                <select name="status" id="product-status" class="wp-select">
-                    <option value="published" <?= ($product?->status->value ?? 'published') === 'published' ? 'selected' : '' ?>>Đang bán (Published)</option>
-                    <option value="draft" <?= ($product?->status->value ?? '') === 'draft' ? 'selected' : '' ?>>Bản nháp (Draft)</option>
-                    <option value="trash" <?= ($product?->status->value ?? '') === 'trash' ? 'selected' : '' ?>>Thùng rác (Trash)</option>
-                </select>
-            </div>
-            <button type="submit" class="wp-btn wp-btn-primary wp-btn-block">
-                💾 <?= $isEdit ? 'Cập nhật Sản phẩm' : 'Đăng Sản phẩm' ?>
-            </button>
-        </div>
     </div>
 </form>
 

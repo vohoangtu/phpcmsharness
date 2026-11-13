@@ -5,6 +5,10 @@ declare(strict_types=1);
 use App\Domain\Enum\ModuleKey;
 use App\Infrastructure\Container\Container;
 use App\Presentation\Controller\Admin\AuthController;
+use App\Presentation\Controller\Admin\AiAssistantController;
+use App\Presentation\Controller\Admin\AnalyticsController;
+use App\Presentation\Controller\Admin\PerformanceController;
+use App\Presentation\Controller\Admin\ExtensionController;
 use App\Presentation\Controller\Admin\CommentController;
 use App\Presentation\Controller\Admin\DashboardController;
 use App\Presentation\Controller\Admin\HarnessController;
@@ -43,6 +47,8 @@ if (PHP_SAPI === 'cli-server') {
     $urlPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
     $file = __DIR__ . $urlPath;
     if ($urlPath !== '/' && is_file($file)) {
+        if (str_starts_with($urlPath, '/assets/')) header('Cache-Control: public, max-age=3600');
+        elseif (str_starts_with($urlPath, '/uploads/')) header('Cache-Control: public, max-age=2592000');
         return false;
     }
 }
@@ -68,6 +74,9 @@ if (is_file($composerAutoload)) {
 
 SecurityHeaders::send();
 SessionBootstrap::start();
+if (PHP_SAPI !== 'cli' && str_contains(strtolower((string)($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '')), 'gzip') && function_exists('ob_gzhandler')) {
+    ob_start('ob_gzhandler');
+}
 
 $config = require dirname(__DIR__) . '/config/app.php';
 $container = new Container($config);
@@ -124,6 +133,10 @@ $mediaCtrl = new MediaController($container, $view);
 $orderCtrl = new OrderController($container, $view);
 $commentCtrl = new CommentController($container, $view);
 $settingCtrl = new SettingController($container, $view);
+$analyticsCtrl = new AnalyticsController($container, $view, (string) ($config['storage_path'] ?? dirname(__DIR__) . '/storage'));
+$performanceCtrl = new PerformanceController($container, $view, $config);
+$extensionCtrl = new ExtensionController($container, $view, $config);
+$aiAssistantCtrl = new AiAssistantController($container, $view);
 
 // Auth
 $router->get('/admin/login', [$authCtrl, 'showLogin']);
@@ -211,6 +224,19 @@ $router->post('/admin/users/save', [$settingCtrl, 'saveUser'], null, true);
 $router->post('/admin/users/delete/{id}', [$settingCtrl, 'deleteUser'], null, true);
 $router->get('/admin/settings', [$settingCtrl, 'settings'], null, true);
 $router->post('/admin/settings/save', [$settingCtrl, 'saveSettings'], null, true);
+$router->get('/admin/home-slider', [$settingCtrl, 'homeSlider'], null, true);
+$router->post('/admin/home-slider/save', [$settingCtrl, 'saveHomeSlider'], null, true);
+$router->get('/admin/analytics', [$analyticsCtrl, 'index'], ModuleKey::ANALYTICS, true);
+$router->post('/admin/analytics/save', [$analyticsCtrl, 'save'], ModuleKey::ANALYTICS, true);
+$router->get('/admin/performance', [$performanceCtrl, 'index'], ModuleKey::PERFORMANCE, true);
+$router->get('/admin/extensions', [$extensionCtrl, 'index'], null, true);
+$router->post('/admin/extensions/toggle', [$extensionCtrl, 'toggle'], null, true);
+$router->post('/admin/ai/generate', [$aiAssistantCtrl, 'generate'], null, true);
+$router->post('/admin/ai/analytics', [$aiAssistantCtrl, 'analyticsInsights'], ModuleKey::ANALYTICS, true);
+$router->get('/admin/ai/jobs/{id}', [$aiAssistantCtrl, 'jobStatus'], null, true);
+
+// Trusted extension providers may register routes after the core routes.
+$container->registerExtensionRoutes($router, $view);
 
 // Dispatch incoming request
 $router->dispatch($_SERVER['REQUEST_METHOD'] ?? 'GET', $_SERVER['REQUEST_URI'] ?? '/');

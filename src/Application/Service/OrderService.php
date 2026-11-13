@@ -13,6 +13,7 @@ use App\Domain\Port\Outbound\OrderRepositoryPort;
 use App\Domain\Port\Outbound\OrderOperationsPort;
 use App\Domain\Port\Outbound\ProductRepositoryPort;
 use App\Domain\Port\Outbound\TransactionPort;
+use App\Application\Extension\HookRegistry;
 use RuntimeException;
 use Throwable;
 
@@ -26,7 +27,8 @@ final readonly class OrderService
         private ProductRepositoryPort $productRepository,
         private CartPort $cart,
         private TransactionPort $transaction,
-        private OrderOperationsPort $operations
+        private OrderOperationsPort $operations,
+        private ?HookRegistry $hooks = null
     ) {
         $this->orderQueries = new OrderQueryService($orderRepository);
         $this->checkoutDataValidator = new CheckoutDataValidator();
@@ -124,6 +126,7 @@ final readonly class OrderService
         }
 
         $this->cart->clear();
+        $this->hooks?->doAction('order.created', $savedOrder);
 
         return $savedOrder;
     }
@@ -149,16 +152,22 @@ final readonly class OrderService
     public function updateOrderStatus(int $id, OrderStatus $status, string $actor = 'system'): void
     {
         if ($status !== OrderStatus::CANCELLED) {
+            $previousStatus = null;
             $this->transaction->begin();
             try {
                 $order = $this->orderRepository->findById($id);
                 if ($order === null) throw new RuntimeException('Không tìm thấy đơn hàng.');
                 if ($order->status === OrderStatus::CANCELLED) throw new RuntimeException('Không thể mở lại đơn hàng đã hủy vì tồn kho đã được hoàn trả.');
                 if ($order->status !== $status && !($order->status === OrderStatus::PENDING && $status === OrderStatus::PROCESSING) && !($order->status === OrderStatus::PROCESSING && $status === OrderStatus::COMPLETED)) throw new RuntimeException('Chuyển trạng thái theo trình tự chờ xử lý → đang giao hàng → hoàn thành.');
+                $previousStatus = $order->status;
                 $this->orderRepository->updateStatus($id, $status);
                 if ($order->status !== $status) $this->operations->addActivity($id, $actor, 'Thay đổi trạng thái đơn', $order->status->label() . ' → ' . $status->label());
                 $this->transaction->commit();
             } catch (Throwable $error) { $this->transaction->rollback(); throw $error; }
+            if ($previousStatus !== null && $previousStatus !== $status) {
+                $updatedOrder = $this->orderRepository->findById($id);
+                if ($updatedOrder !== null) $this->hooks?->doAction('order.status_changed', $updatedOrder, $previousStatus, $status, $actor);
+            }
             return;
         }
 
@@ -181,6 +190,8 @@ final readonly class OrderService
             $this->orderRepository->updateStatus($id, OrderStatus::CANCELLED);
             $this->operations->addActivity($id, $actor, 'Hủy đơn', 'Đã hoàn tồn kho.');
             $this->transaction->commit();
+            $cancelledOrder = $this->orderRepository->findById($id);
+            if ($cancelledOrder !== null) $this->hooks?->doAction('order.status_changed', $cancelledOrder, $order->status, OrderStatus::CANCELLED, $actor);
         } catch (Throwable $error) {
             $this->transaction->rollback();
             throw $error;

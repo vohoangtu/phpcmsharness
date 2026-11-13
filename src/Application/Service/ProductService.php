@@ -10,12 +10,14 @@ use App\Domain\Enum\ProductSort;
 use App\Domain\Port\Outbound\ProductRepositoryPort;
 use App\Domain\Port\Outbound\TagRepositoryPort;
 use App\Domain\ValueObject\Slug;
+use App\Application\Extension\HookRegistry;
 
 final readonly class ProductService
 {
     public function __construct(
         private ProductRepositoryPort $productRepository,
-        private TagRepositoryPort $tagRepository
+        private TagRepositoryPort $tagRepository,
+        private ?HookRegistry $hooks = null
     ) {
     }
 
@@ -107,7 +109,9 @@ final readonly class ProductService
             status: $status,
             categoryId: $categoryId,
             categoryName: null,
-            isFeatured: !empty($data['is_featured'])
+            isFeatured: !empty($data['is_featured']),
+            seoTitle: trim((string) ($data['seo_title'] ?? '')),
+            seoDescription: trim((string) ($data['seo_description'] ?? ''))
         );
 
         $savedId = $this->productRepository->save($product);
@@ -115,6 +119,8 @@ final readonly class ProductService
         $rawTags = (string) ($data['tags'] ?? '');
         $tagNames = array_values(array_filter(array_map('trim', explode(',', $rawTags)), fn(string $t) => $t !== ''));
         $this->tagRepository->syncProductTags($savedId, $tagNames);
+        $savedProduct = $this->productRepository->findById($savedId);
+        if ($savedProduct !== null) $this->hooks?->doAction('product.saved', $savedProduct);
 
         return $savedId;
     }
